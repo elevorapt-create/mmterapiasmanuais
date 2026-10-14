@@ -1,29 +1,24 @@
 # Marília Mendes — Terapias Manuais
 
-Domínio de produção previsto: https://mariliamendesterapiasmanuais.pt/
+Site estático mantido no Codex, versionado no GitHub e publicado pela Cloudflare Pages.
 
-## Publicação pretendida
+- Repositório: https://github.com/elevorapt-create/mmterapiasmanuais
+- Alojamento: https://mmterapiasmanuais.pages.dev/
+- Domínio final: https://mariliamendesterapiasmanuais.pt/
+- Saída de publicação: `dist`, ramo `main`, sem compilação no alojamento.
 
-Código mantido no Codex e GitHub; alojamento Cloudflare. O diretório `dist` contém o site estático completo. Pode ser servido sem compilação. `build_content.py` é o gerador de conteúdo existente e deve acompanhar futuras alterações editoriais.
+## Conteúdo
 
-Para uma integração Git com Cloudflare Pages: selecionar o repositório GitHub dedicado, ramo de produção `main`, sem framework e diretório de saída `dist`. Validar uma pré-visualização antes de associar o domínio.
+As seis fotografias reais foram selecionadas e aprovadas pelo gestor. O gestor confirmou a autorização de utilização da imagem da profissional e da pessoa em atendimento, incluindo a disponibilização no repositório público. As variantes WebP responsivas preservam os enquadramentos das fotografias de origem. Não incluir novos originais de alta resolução no repositório.
 
-## Estado da migração
+`build_content.py` gera as páginas HTML e os ficheiros SEO. Executar a partir da raiz do projeto com Python em UTF-8 (`python -X utf8 build_content.py`). CSS, JavaScript e recursos ficam em `dist`. Não substituir variantes `real-*` pelas imagens provisórias anteriores.
 
-- Fonte original recuperada do Sites, commit 54475dbb47de1a4665d25387b09e8991f9a052cc.
-- Canonical, Open Graph, dados estruturados, robots e sitemap preparados para o domínio final.
-- Design, oferta, preços e contactos preservados.
-- Domínio registado na Dominios.pt; sem email associado, segundo o gestor.
-- A integração Cloudflare disponível não permite criar zonas. A zona precisa de ser adicionada pelo titular ou através de acesso autorizado com essa capacidade.
-- Não há publicação nem configuração de DNS concluídas.
+## Pendências
 
-## Antes de publicar
+- Ativação da zona DNS, associação do domínio final e validação de HTTPS e www.
+- Imagem de drenagem linfática permanece provisória: não foi identificada uma fotografia real que confirme a técnica.
+- Política de privacidade continua uma minuta, sujeita a dados finais e revisão.
+- GA4, GTM e Google Ads não estão instalados; consentimento e eventos devem ser validados ao integrar essas plataformas.
 
-- Rever as novas fotografias e preparar as substituições aprovadas.
-- Finalizar os dados e a revisão da política de privacidade, que permanece uma minuta.
-- Rever visualmente em computador e telemóvel.
-- Configurar e validar medição apenas com as propriedades e consentimento adequados.
-- Obter aprovação do gestor para publicar.
-
-Não colocar credenciais, documentos de clientes, listas de contactos ou dados de atendimento no repositório.
+Não guardar credenciais, fichas de atendimento ou contactos de pacientes neste repositório.
 

@@ -7,7 +7,18 @@ def cta(text,event='general',service=None,cls='btn'):
  msg=f'Olá, Marília! Gostaria de saber mais sobre a {service}.' if service else 'Olá, Marília! Encontrei o seu espaço e gostaria de saber mais sobre os atendimentos.'
  return f'<a class="{cls}" href="https://wa.me/351931164864?text={quote(msg)}" target="_blank" rel="noopener noreferrer" data-wa="{event}">{wa if "btn" in cls else ""}{text}</a>'
 PHOTO_ALTS={'hero-image': 'Sessão de massagem num ambiente tranquilo', 'therapeutic-massage-image': 'Massagem terapêutica na zona das costas', 'sports-massage-image': 'Massagem desportiva nos músculos da perna', 'relaxing-massage-image': 'Massagem relaxante nas costas e ombros', 'lymphatic-drainage-image': 'Técnica manual suave aplicada nas pernas', 'about-marilia-image': 'Imagem ilustrativa de uma profissional de terapias manuais', 'location-image': 'Ambiente ilustrativo de um espaço de terapias manuais'}
+REVIEW_PHOTOS={'hero-image': ('Estudio_Marilia-1652.jpg', 'Atendimento de terapias manuais no espaço da Marília'), 'therapeutic-massage-image': ('Estudio_Marilia-1639.jpg', 'Trabalho manual na região das costas durante uma sessão'), 'sports-massage-image': ('Estudio_Marilia-1709.jpg', 'Trabalho manual na perna durante uma sessão'), 'relaxing-massage-image': ('Estudio_Marilia-1672.jpg', 'Detalhe de uma sessão de massagem nas costas'), 'about-marilia-image': ('Estudio_Marilia-1749.jpg', 'Retrato da profissional no espaço de atendimento'), 'location-image': ('Estudio_Marilia-1680.jpg', 'Atendimento e identidade visual na parede do espaço')}
+
+PHOTO_DIMENSIONS={'hero-image': (6447, 4300), 'therapeutic-massage-image': (6965, 4646), 'sports-massage-image': (6962, 4644), 'relaxing-massage-image': (7952, 5304), 'about-marilia-image': (5114, 5114), 'location-image': (4898, 7343)}
+
 def photo(id,extra=''):
+ if id in REVIEW_PHOTOS:
+  filename,alt=REVIEW_PHOTOS[id]
+  loading='eager' if id=='hero-image' else 'lazy'
+  priority=' fetchpriority="high"' if id=='hero-image' else ''
+  width,height=PHOTO_DIMENSIONS[id]
+  sizes='(max-width: 720px) calc(100vw - 40px), 560px'
+  return f'<div class="photo has-photo" id="{id}" data-photo-slot="{id}"><img src="/assets/real-{id}-1200.webp" srcset="/assets/real-{id}-640.webp 640w, /assets/real-{id}-1200.webp 1200w" sizes="{sizes}" width="{width}" height="{height}" alt="{alt}" loading="{loading}" decoding="async"{priority}></div>' 
  loading='eager' if id=='hero-image' else 'lazy'
  priority=' fetchpriority="high"' if id=='hero-image' else ''
  if id in ['hero-image','therapeutic-massage-image','about-marilia-image','location-image']:
