@@ -9,3 +9,5 @@
 #about-marilia-image img{object-position:48% center}
 @media(max-width:720px){.hero .photo.has-photo{aspect-ratio:5/4}.photo.has-photo img{width:100%;height:100%}#about-marilia-image img{object-position:center 42%}}
 
+
+.footer .complaints-link{display:block;width:220px;max-width:100%;padding:10px;background:#fff;border-radius:4px;margin:8px 0 16px}.footer .complaints-link img{width:100%;height:auto;margin:0}
