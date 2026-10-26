@@ -41,3 +41,14 @@ if(!saved)banner.hidden=false;
 document.querySelectorAll('[data-year]').forEach(e=>e.textContent=new Date().getFullYear());
 const depths=new Set();addEventListener('scroll',()=>{const max=document.documentElement.scrollHeight-innerHeight;if(max<=0)return;const p=Math.round(scrollY/max*100);[25,50,75,90].forEach(n=>{if(p>=n&&!depths.has(n)){depths.add(n);track('scroll_depth',{percent:n})}})},{passive:true});
 
+
+// Reserve visual space for the floating contact button while the banner is open.
+// This does not read or change the visitor's consent choice.
+function syncCookieBannerSpace(){
+ const offset=banner.hidden?0:Math.ceil(banner.getBoundingClientRect().height)+28;
+ document.documentElement.style.setProperty('--cookie-banner-offset',offset+'px');
+}
+if('ResizeObserver' in window)new ResizeObserver(syncCookieBannerSpace).observe(banner);
+new MutationObserver(syncCookieBannerSpace).observe(banner,{attributes:true,attributeFilter:['hidden']});
+addEventListener('resize',syncCookieBannerSpace,{passive:true});
+syncCookieBannerSpace();
