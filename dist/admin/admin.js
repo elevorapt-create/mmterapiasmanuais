@@ -8,6 +8,7 @@ const stages = {
   completed: 'Sessão realizada',
   lost: 'Encerrado',
 };
+const appointmentStages = ['scheduled', 'completed'];
 const qualifications = {
   unrated: 'Por qualificar',
   cold: 'Frio',
@@ -32,6 +33,7 @@ const sources = {
 const $ = selector => document.querySelector(selector);
 const field = (form, name) => form.elements.namedItem(name);
 const filters = $('#filters');
+const clientFilters = $('#client-filters');
 const leadForm = $('#lead-form');
 const serviceForm = $('#service-form');
 const currency = new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' });
@@ -44,6 +46,8 @@ let services = [];
 let currentPage = 1;
 let currentView = 'leads';
 let leadRequest = 0;
+let clientRequest = 0;
+let clientPage = 1;
 let editingLead;
 let editingService;
 let draggedLead;
@@ -75,6 +79,7 @@ function selectOptions(select, options, first = '', selected = select.value) {
 
 function showLogin(message) {
   leadRequest++;
+  clientRequest++;
   services = [];
   for (const form of [leadForm, serviceForm]) {
     form.closest('dialog').close();
@@ -86,6 +91,7 @@ function showLogin(message) {
   $('#summary').replaceChildren();
   $('#value-summary').replaceChildren();
   $('#service-list').replaceChildren();
+  $('#client-list').replaceChildren();
   $('#history-list').replaceChildren();
   $('#workspace').hidden = true;
   $('#login').hidden = false;
@@ -138,6 +144,46 @@ function formatDate(date) {
   return date.split('-').reverse().join('/');
 }
 
+function formatAppointment(appointment) {
+  const [date, time] = appointment.split('T');
+  return formatDate(date) + ' às ' + time;
+}
+
+async function loadClients(page = clientPage) {
+  const request = ++clientRequest;
+  const query = new URLSearchParams(new FormData(clientFilters));
+  query.set('page', page);
+  try {
+    const result = await api('clients?' + query);
+    if (request !== clientRequest) return;
+    const pages = Math.max(1, Math.ceil(result.total / result.page_size));
+    if (page > pages) return await loadClients(pages);
+    clientPage = page;
+    $('#client-list').replaceChildren(...result.clients.map(client => {
+      const row = element('tr');
+      const name = element('button', 'client-name', client.name);
+      name.type = 'button';
+      name.addEventListener('click', () => openLead(client.id));
+      const nameCell = element('td');
+      nameCell.append(name);
+      const appointment = client.appointment_at ? formatAppointment(client.appointment_at)
+        : appointmentStages.includes(client.stage) ? 'Sem data registada' : '—';
+      row.append(nameCell, ...[client.phone, client.email, client.service_name, stages[client.stage], appointment]
+        .map(value => element('td', '', value || '—')));
+      return row;
+    }));
+    $('#client-table').hidden = !result.clients.length;
+    setMessage($('#empty-clients'), result.clients.length ? '' : query.get('q')
+      ? 'Nenhum cliente corresponde à pesquisa.' : 'Ainda não há contactos com agendamento no histórico.');
+    $('#client-pagination').hidden = pages === 1;
+    $('#client-previous').disabled = clientPage === 1;
+    $('#client-next').disabled = clientPage === pages;
+    $('#client-page-label').textContent = 'Página ' + clientPage + ' de ' + pages;
+  } catch (error) {
+    if (request === clientRequest) notice(error.message, true);
+  }
+}
+
 function finishDrag() {
   draggedLead = undefined;
   $('#board .dragging')?.classList.remove('dragging');
@@ -175,8 +221,7 @@ function leadCard(lead, today, draggable) {
       (overdue ? 'Seguimento em atraso: ' : 'Seguimento: ') + formatDate(lead.follow_up_on)));
   }
   if (lead.appointment_at) {
-    const [date, time] = lead.appointment_at.split('T');
-    card.append(element('span', 'card-detail', formatDate(date) + ' às ' + time));
+    card.append(element('span', 'card-detail', formatAppointment(lead.appointment_at)));
   }
   card.addEventListener('click', () => openLead(lead.id));
   card.draggable = draggable;
@@ -275,6 +320,7 @@ async function loadLeads(page = currentPage) {
 function switchView(view, focus = true) {
   currentView = view;
   $('#view-leads').hidden = view !== 'leads';
+  $('#view-clients').hidden = view !== 'clients';
   $('#view-services').hidden = view !== 'services';
   document.querySelectorAll('[data-view]').forEach(button => {
     if (button.dataset.view === view) button.setAttribute('aria-current', 'page');
@@ -285,6 +331,12 @@ function switchView(view, focus = true) {
 
 function updateQualificationHint() {
   $('#qualification-hint').textContent = qualificationHints[field(leadForm, 'qualification').value];
+}
+
+function updateAppointmentField() {
+  const available = appointmentStages.includes(field(leadForm, 'stage').value);
+  $('#appointment-field').hidden = !available;
+  field(leadForm, 'appointment_at').disabled = !available;
 }
 
 async function openLead(id) {
@@ -316,6 +368,7 @@ async function openLead(id) {
     if (input && value !== null) input.value = value;
   }
   updateQualificationHint();
+  updateAppointmentField();
   $('#campaign').open = ['source', 'medium', 'campaign', 'content', 'term'].some(key => lead['utm_' + key]);
   $('#lead-history').hidden = !history.length;
   $('#history-list').replaceChildren(...history.map(entry => {
@@ -391,12 +444,14 @@ selectOptions(field(leadForm, 'qualification'), Object.entries(qualifications));
 selectOptions(field(leadForm, 'source'), Object.entries(sources));
 field(leadForm, 'qualification').setAttribute('aria-describedby', 'qualification-hint');
 field(leadForm, 'qualification').addEventListener('change', updateQualificationHint);
+field(leadForm, 'stage').addEventListener('change', updateAppointmentField);
 
 document.querySelectorAll('[data-view]').forEach(button => {
   button.addEventListener('click', () => {
     notice();
     switchView(button.dataset.view);
     if (currentView === 'services') loadServices().catch(error => notice(error.message, true));
+    else if (currentView === 'clients') loadClients(1);
     else loadLeads();
   });
 });
@@ -408,7 +463,8 @@ $('#new-service').addEventListener('click', () => openService());
 $('#delete-lead').addEventListener('click', () => {
   const { id, name, version } = editingLead;
   if (!window.confirm('Excluir o lead «' + name + '» e o seu histórico?')) return;
-  submitChange(leadForm, () => api('leads/' + id, 'DELETE', { version }), 'Lead excluído.', loadLeads);
+  submitChange(leadForm, () => api('leads/' + id, 'DELETE', { version }), 'Lead excluído.',
+    currentView === 'clients' ? loadClients : loadLeads);
 });
 $('#delete-service').addEventListener('click', () => {
   const { id, name, version } = editingService;
@@ -417,6 +473,13 @@ $('#delete-service').addEventListener('click', () => {
 });
 $('#previous').addEventListener('click', () => loadLeads(currentPage - 1));
 $('#next').addEventListener('click', () => loadLeads(currentPage + 1));
+$('#client-previous').addEventListener('click', () => loadClients(clientPage - 1));
+$('#client-next').addEventListener('click', () => loadClients(clientPage + 1));
+clientFilters.addEventListener('submit', event => {
+  event.preventDefault();
+  notice();
+  loadClients(1);
+});
 filters.addEventListener('submit', event => {
   event.preventDefault();
   notice();
@@ -427,7 +490,8 @@ leadForm.addEventListener('submit', event => {
   const data = Object.fromEntries(new FormData(leadForm));
   data.clear_service = data.service_id === '';
   data.service_id = data.service_id && data.service_id !== 'deleted' ? Number(data.service_id) : null;
-  save(event, 'leads', editingLead, data, () => loadLeads(editingLead.id ? currentPage : 1));
+  save(event, 'leads', editingLead, data,
+    currentView === 'clients' ? loadClients : () => loadLeads(editingLead.id ? currentPage : 1));
 });
 serviceForm.addEventListener('submit', event => {
   const data = Object.fromEntries(new FormData(serviceForm));

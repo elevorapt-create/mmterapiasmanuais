@@ -30,6 +30,7 @@
       </a>
       <nav aria-label="CRM">
         <button type="button" data-view="leads" aria-current="page">Pipeline de leads</button>
+        <button type="button" data-view="clients">Clientes</button>
         <button type="button" data-view="services">Serviços</button>
       </nav>
       <div class="sidebar-actions">
@@ -61,6 +62,34 @@
           <button id="next" class="secondary" type="button">Seguinte</button>
         </div>
       </section>
+      <section id="view-clients" aria-labelledby="clients-title" hidden>
+        <div class="page-header">
+          <h1 id="clients-title" tabindex="-1">Clientes</h1>
+        </div>
+        <form id="client-filters" class="filters" role="search" aria-label="Pesquisar clientes">
+          <label class="search">Pesquisa<input name="q" type="search" maxlength="120" placeholder="Nome, telefone ou e-mail"></label>
+          <button class="secondary" type="submit">Pesquisar</button>
+        </form>
+        <p id="empty-clients" class="empty" hidden></p>
+        <div id="client-table" class="table-frame" role="region" aria-label="Cadastro de clientes" tabindex="0" hidden>
+          <table>
+            <thead><tr>
+              <th scope="col">Nome</th>
+              <th scope="col">Telefone</th>
+              <th scope="col">E-mail</th>
+              <th scope="col">Serviço</th>
+              <th scope="col">Etapa atual</th>
+              <th scope="col">Agendamento</th>
+            </tr></thead>
+            <tbody id="client-list"></tbody>
+          </table>
+        </div>
+        <div id="client-pagination" class="pagination" hidden>
+          <button id="client-previous" class="secondary" type="button">Anterior</button>
+          <span id="client-page-label"></span>
+          <button id="client-next" class="secondary" type="button">Seguinte</button>
+        </div>
+      </section>
       <section id="view-services" aria-labelledby="services-title" hidden>
         <div class="page-header">
           <h1 id="services-title" tabindex="-1">Serviços</h1>
@@ -88,7 +117,7 @@
           <label>Qualificação <select name="qualification" required></select></label>
           <p id="qualification-hint" class="field-hint full"></p>
           <label>Origem <select name="source" required></select></label>
-          <label>Agendamento (hora de Lisboa) <input name="appointment_at" type="datetime-local"></label>
+          <label id="appointment-field" hidden>Agendamento (hora de Lisboa) <input name="appointment_at" type="datetime-local" disabled></label>
           <label>Próxima ação <input name="next_action" maxlength="240"></label>
           <label>Data de seguimento <input name="follow_up_on" type="date"></label>
           <label class="full">Notas comerciais <textarea name="notes" rows="3" maxlength="2000" aria-describedby="notes-hint"></textarea></label>

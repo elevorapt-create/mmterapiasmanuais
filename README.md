@@ -21,6 +21,8 @@ A qualificação indica a intenção de marcação. Use **Por qualificar** quand
 
 Arraste os cartões entre colunas no computador ou mude a etapa na edição do lead. Os cartões mostram o preço registado ao associar o serviço. O painel soma separadamente os valores dos agendamentos feitos e das sessões realizadas, incluindo todos os leads dessas etapas. Pode excluir um lead e o respetivo histórico, ou excluir um serviço do catálogo mantendo o preço e o nome nos leads que já o utilizavam.
 
+A área **Clientes** reúne os contactos que já passaram por agendamento ou sessão realizada. Pode pesquisar por nome, telefone ou e-mail e abrir o registo pelo nome. A data de agendamento só é usada em **Agendamento feito** e **Sessão realizada** e deve ser indicada manualmente. Ao arrastar um lead para agendamento a partir de outra etapa, a data fica por preencher.
+
 ### Executar localmente
 
 Use Node.js 22 ou superior. Crie na raiz um ficheiro privado `.dev.vars` com `CRM_ADMIN_PASSWORD` (escolha uma palavra-passe para desenvolvimento) e `CRM_SESSION_SECRET` (gere um valor aleatório com `openssl rand -hex 32`). A palavra-passe é o acesso a uma conta de administração. A sessão expira ao fim de oito horas.

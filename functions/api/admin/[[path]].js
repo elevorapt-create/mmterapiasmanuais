@@ -2,6 +2,9 @@ const COOKIE = '__Host-mm_crm';
 const SESSION_SECONDS = 8 * 60 * 60;
 const encoder = new TextEncoder();
 const stages = ['new', 'conversation', 'follow_up', 'scheduled', 'completed', 'lost'];
+const appointmentStages = ['scheduled', 'completed'];
+const appointmentStagesSql = "('" + appointmentStages.join("', '") + "')";
+const visibleAppointment = "CASE WHEN stage IN " + appointmentStagesSql + " THEN appointment_at ELSE '' END";
 const qualifications = ['unrated', 'cold', 'warm', 'hot'];
 const sources = ['unknown', 'website', 'whatsapp', 'instagram', 'google', 'referral', 'other'];
 const leadFields = [
@@ -112,6 +115,7 @@ function dateField(data, field, label, withTime = false) {
 }
 
 async function leadValues(data, db) {
+  const stage = choice(data, 'stage', stages, 'etapa');
   const email = textField(data, 'email', 254, 'e-mail');
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     throw new RequestError(400, 'Introduza um e-mail válido.');
@@ -125,12 +129,12 @@ async function leadValues(data, db) {
     textField(data, 'phone', 40, 'telefone'),
     email,
     serviceId,
-    choice(data, 'stage', stages, 'etapa'),
+    stage,
     choice(data, 'qualification', qualifications, 'qualificação'),
     choice(data, 'source', sources, 'origem'),
     textField(data, 'next_action', 240, 'próxima ação'),
     dateField(data, 'follow_up_on', 'data de seguimento'),
-    dateField(data, 'appointment_at', 'data do agendamento', true),
+    appointmentStages.includes(stage) ? dateField(data, 'appointment_at', 'data do agendamento', true) : '',
     textField(data, 'notes', 2000, 'notas'),
     ...leadFields.slice(11).map(field => textField(data, field, 200, field)),
   ];
@@ -192,17 +196,43 @@ async function activeSession(request, db, key, now) {
     .bind(sessionKey, now).first('session_key');
 }
 
-async function listLeads(db, query) {
-  const filters = [];
-  const parameters = [];
+function contactSearch(query, filters, parameters) {
   const term = (query.get('q') ?? '').trim().slice(0, 120);
-  const stage = query.get('stage');
-  const qualification = query.get('qualification');
-  const service = query.get('service');
   if (term) {
     filters.push('(instr(lower(leads.name), lower(?)) OR instr(leads.phone, ?) OR instr(lower(leads.email), lower(?)))');
     parameters.push(term, term, term);
   }
+}
+
+function pageNumber(query) {
+  return Math.min(100000, Math.max(1, Number.parseInt(query.get('page'), 10) || 1));
+}
+
+async function listClients(db, query) {
+  const filters = [
+    'EXISTS (SELECT 1 FROM lead_history WHERE lead_id = leads.id AND stage IN ' + appointmentStagesSql + ')',
+  ];
+  const parameters = [];
+  contactSearch(query, filters, parameters);
+  const where = ' WHERE ' + filters.join(' AND ');
+  const pageSize = 40;
+  const [clients, count] = await db.batch([
+    db.prepare('SELECT id, name, phone, email, stage, service_name, ' + visibleAppointment +
+      ' AS appointment_at FROM leads' + where +
+      ' ORDER BY NULLIF(' + visibleAppointment + ", '') ASC NULLS LAST, name COLLATE NOCASE, id LIMIT ? OFFSET ?")
+      .bind(...parameters, pageSize, (pageNumber(query) - 1) * pageSize),
+    db.prepare('SELECT count(*) AS total FROM leads' + where).bind(...parameters),
+  ]);
+  return json({ clients: clients.results, total: count.results[0].total, page_size: pageSize });
+}
+
+async function listLeads(db, query) {
+  const filters = [];
+  const parameters = [];
+  contactSearch(query, filters, parameters);
+  const stage = query.get('stage');
+  const qualification = query.get('qualification');
+  const service = query.get('service');
   if (stages.includes(stage)) {
     filters.push('stage = ?');
     parameters.push(stage);
@@ -216,12 +246,12 @@ async function listLeads(db, query) {
     parameters.push(Number(service));
   }
   const where = filters.length ? ' WHERE ' + filters.join(' AND ') : '';
-  const page = Math.min(100000, Math.max(1, Number.parseInt(query.get('page'), 10) || 1));
+  const page = pageNumber(query);
   const pageSize = 60;
   const [leads, summary, values] = await db.batch([
     db.prepare(
       'SELECT id, version, name, service_name, service_price_cents, stage, qualification, ' +
-      'next_action, follow_up_on, appointment_at FROM leads' +
+      'next_action, follow_up_on, ' + visibleAppointment + ' AS appointment_at FROM leads' +
       where + " ORDER BY NULLIF(follow_up_on, '') ASC NULLS LAST, updated_at DESC, leads.id DESC LIMIT ? OFFSET ?",
     ).bind(...parameters, pageSize, (page - 1) * pageSize),
     db.prepare('SELECT stage, count(*) AS total FROM leads' + where + ' GROUP BY stage').bind(...parameters),
@@ -249,9 +279,12 @@ async function saveRecord(db, table, id, fields, values, data) {
   const updateTime = table === 'leads' ? ", updated_at = datetime('now')" : '';
   const clearService = table === 'leads' && data.service_id == null && data.clear_service === true
     ? ', service_name = NULL, service_price_cents = NULL' : '';
-  const row = await db.prepare('UPDATE ' + table + ' SET ' + fields.map(field => field + ' = ?').join(', ') +
+  const updates = fields.map((field, index) => [field, values[index]])
+    .filter(([field]) => field !== 'appointment_at' || appointmentStages.includes(data.stage));
+  const assignments = updates.map(([field]) => field + ' = ?');
+  const row = await db.prepare('UPDATE ' + table + ' SET ' + assignments.join(', ') +
     ', version = version + 1' + updateTime + clearService + ' WHERE id = ? AND version = ? RETURNING id')
-    .bind(...values, id, version).first();
+    .bind(...updates.map(([, value]) => value), id, version).first();
   return changedRecord(row);
 }
 
@@ -278,6 +311,7 @@ export async function onRequest({ request, env, params }) {
       return json({ authenticated: false }, 200, { 'Set-Cookie': sessionCookie('', 0) });
     }
     if (path.length === 1 && resource === 'leads' && method === 'GET') return await listLeads(db, url.searchParams);
+    if (path.length === 1 && resource === 'clients' && method === 'GET') return await listClients(db, url.searchParams);
     if (path.length === 1 && resource === 'services' && method === 'GET') {
       const { results } = await db.prepare('SELECT * FROM services ORDER BY active DESC, name COLLATE NOCASE, id').all();
       return json({ services: results });
@@ -298,8 +332,10 @@ export async function onRequest({ request, env, params }) {
       const stage = choice(data, 'stage', stages, 'etapa');
       const version = integer(data.version, 1, Number.MAX_SAFE_INTEGER, 'versão', false);
       const row = await db.prepare(
-        "UPDATE leads SET stage = ?, version = version + 1, updated_at = datetime('now') WHERE id = ? AND version = ? RETURNING id",
-      ).bind(stage, Number(identifier), version).first();
+        'UPDATE leads SET stage = ?, appointment_at = CASE WHEN stage NOT IN ' + appointmentStagesSql +
+        " AND ? THEN '' ELSE appointment_at END, version = version + 1, updated_at = datetime('now')" +
+        ' WHERE id = ? AND version = ? RETURNING id',
+      ).bind(stage, Number(appointmentStages.includes(stage)), Number(identifier), version).first();
       return changedRecord(row);
     }
     if (path.length === 2 && /^[1-9]\d{0,14}$/.test(identifier)) {
@@ -310,7 +346,9 @@ export async function onRequest({ request, env, params }) {
           db.prepare('SELECT stage, qualification, created_at FROM lead_history WHERE lead_id = ? ORDER BY id DESC LIMIT 100').bind(id),
         ]);
         if (!lead.results.length) throw new RequestError(404, 'Lead não encontrado.');
-        return json({ lead: lead.results[0], history: history.results });
+        const record = lead.results[0];
+        if (!appointmentStages.includes(record.stage)) record.appointment_at = '';
+        return json({ lead: record, history: history.results });
       }
       if (resource === 'leads' && method === 'PATCH') {
         const data = await readJson(request);
