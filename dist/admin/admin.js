@@ -46,6 +46,8 @@ let currentView = 'leads';
 let leadRequest = 0;
 let editingLead;
 let editingService;
+let draggedLead;
+let movingLead = false;
 
 function element(tag, className, label) {
   const node = document.createElement(tag);
@@ -82,6 +84,7 @@ function showLogin(message) {
   editingService = undefined;
   $('#board').replaceChildren();
   $('#summary').replaceChildren();
+  $('#value-summary').replaceChildren();
   $('#service-list').replaceChildren();
   $('#history-list').replaceChildren();
   $('#workspace').hidden = true;
@@ -135,11 +138,34 @@ function formatDate(date) {
   return date.split('-').reverse().join('/');
 }
 
-function leadCard(lead, today) {
+function finishDrag() {
+  draggedLead = undefined;
+  $('#board .dragging')?.classList.remove('dragging');
+  $('#board .drop-target')?.classList.remove('drop-target');
+}
+
+async function moveLead(lead, stage) {
+  if (movingLead || lead.stage === stage) return;
+  movingLead = true;
+  try {
+    await api('leads/' + lead.id + '/stage', 'PATCH', { stage, version: lead.version });
+    notice('Lead movido para «' + stages[stage] + '».');
+  } catch (error) {
+    notice(error.message, true);
+  } finally {
+    await loadLeads();
+    movingLead = false;
+  }
+}
+
+function leadCard(lead, today, draggable) {
   const card = element('button', 'lead-card');
   card.type = 'button';
   card.append(element('strong', '', lead.name));
   if (lead.service_name) card.append(element('span', 'card-detail', lead.service_name));
+  if (lead.service_price_cents != null) {
+    card.append(element('span', 'card-detail lead-price', currency.format(lead.service_price_cents / 100)));
+  }
   card.append(element('span', 'badge ' + lead.qualification, qualifications[lead.qualification]));
   if (lead.next_action) card.append(element('span', 'card-detail', lead.next_action));
   if (lead.follow_up_on) {
@@ -153,7 +179,27 @@ function leadCard(lead, today) {
     card.append(element('span', 'card-detail', formatDate(date) + ' às ' + time));
   }
   card.addEventListener('click', () => openLead(lead.id));
+  card.draggable = draggable;
+  card.addEventListener('dragstart', event => {
+    if (movingLead) {
+      event.preventDefault();
+      return;
+    }
+    draggedLead = lead;
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', String(lead.id));
+    card.classList.add('dragging');
+  });
+  card.addEventListener('dragend', finishDrag);
   return card;
+}
+
+function renderMetrics(target, metrics) {
+  target.replaceChildren(...metrics.map(([label, total]) => {
+    const metric = element('div', 'metric');
+    metric.append(element('span', '', label), element('strong', '', total));
+    return metric;
+  }));
 }
 
 function renderLeads(result, stageFilter) {
@@ -165,22 +211,42 @@ function renderLeads(result, stageFilter) {
     ['Agendamentos feitos', totals.scheduled ?? 0],
     ['Sessões realizadas', totals.completed ?? 0],
   ];
-  $('#summary').replaceChildren(...metrics.map(([label, total]) => {
-    const metric = element('div', 'metric');
-    metric.append(element('span', '', label), element('strong', '', total));
-    return metric;
-  }));
+  renderMetrics($('#summary'), metrics);
+  const values = Object.fromEntries((result.values ?? []).map(row => [row.stage, row.cents]));
+  renderMetrics($('#value-summary'), [
+    ['Valor total de agendamentos feitos', currency.format((values.scheduled ?? 0) / 100)],
+    ['Valor total de sessões realizadas', currency.format((values.completed ?? 0) / 100)],
+  ]);
 
   const today = localDate.format(new Date());
   const columns = Object.entries(stages).filter(([key]) => !stageFilter || key === stageFilter);
   const board = $('#board');
+  finishDrag();
   board.classList.toggle('single-stage', columns.length === 1);
   board.replaceChildren(...columns.map(([key, label]) => {
     const column = element('section', 'column');
     const heading = element('h2', '', label);
     heading.append(element('span', 'count', totals[key] ?? 0));
     column.append(heading);
-    for (const lead of result.leads.filter(item => item.stage === key)) column.append(leadCard(lead, today));
+    for (const lead of result.leads.filter(item => item.stage === key)) {
+      column.append(leadCard(lead, today, columns.length > 1));
+    }
+    column.addEventListener('dragover', event => {
+      if (!draggedLead || draggedLead.stage === key) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'move';
+      column.classList.add('drop-target');
+    });
+    column.addEventListener('dragleave', event => {
+      if (!column.contains(event.relatedTarget)) column.classList.remove('drop-target');
+    });
+    column.addEventListener('drop', event => {
+      if (!draggedLead) return;
+      event.preventDefault();
+      const lead = draggedLead;
+      finishDrag();
+      moveLead(lead, key);
+    });
     return column;
   }));
   setMessage($('#empty-leads'), count ? '' : 'Nenhum lead corresponde a esta pesquisa.');
@@ -237,10 +303,14 @@ async function openLead(id) {
   editingLead = lead;
   leadForm.reset();
   $('#lead-title').textContent = id === undefined ? 'Novo lead' : 'Editar lead';
-  selectOptions(field(leadForm, 'service_id'),
-    services.filter(service => service.active || service.id === lead.service_id)
-      .map(service => [service.id, service.name + (service.active ? '' : ' (inativo)')]),
-    'Sem serviço', lead.service_id ?? '');
+  $('#delete-lead').hidden = !lead.id;
+  const serviceOptions = services.filter(service => service.active || service.id === lead.service_id)
+    .map(service => [service.id, service.name + (service.active ? '' : ' (inativo)')]);
+  const selection = lead.service_id ?? (lead.service_name ? 'deleted' : '');
+  if (lead.service_name && !serviceOptions.some(([serviceId]) => serviceId === selection)) {
+    serviceOptions.push([selection, lead.service_name + (selection === 'deleted' ? ' (excluído)' : '')]);
+  }
+  selectOptions(field(leadForm, 'service_id'), serviceOptions, 'Sem serviço', selection);
   for (const [name, value] of Object.entries(lead)) {
     const input = field(leadForm, name);
     if (input && value !== null) input.value = value;
@@ -261,6 +331,7 @@ function openService(service = {}) {
   editingService = service;
   serviceForm.reset();
   $('#service-title').textContent = service.id ? 'Editar serviço' : 'Novo serviço';
+  $('#delete-service').hidden = !service.id;
   field(serviceForm, 'name').value = service.name ?? '';
   field(serviceForm, 'description').value = service.description ?? '';
   field(serviceForm, 'duration_minutes').value = service.duration_minutes ?? '';
@@ -270,19 +341,16 @@ function openService(service = {}) {
   $('#service-dialog').showModal();
 }
 
-async function save(event, resource, existing, data, refresh) {
-  event.preventDefault();
-  const form = event.currentTarget;
-  const button = form.querySelector('[type="submit"]');
-  if (button.disabled) return;
+async function submitChange(form, request, message, refresh) {
+  const buttons = form.querySelectorAll('[type="submit"], .danger');
+  if (buttons[0].disabled) return;
   const errorTarget = form.querySelector('.form-error');
   setMessage(errorTarget);
-  button.disabled = true;
-  if (existing.id) data.version = existing.version;
+  buttons.forEach(button => { button.disabled = true; });
   try {
-    await api(resource + (existing.id ? '/' + existing.id : ''), existing.id ? 'PATCH' : 'POST', data);
+    await request();
     form.closest('dialog').close();
-    notice(resource === 'leads' ? 'Lead guardado.' : 'Serviço guardado.');
+    notice(message);
     try {
       await refresh();
     } catch (error) {
@@ -291,8 +359,16 @@ async function save(event, resource, existing, data, refresh) {
   } catch (error) {
     setMessage(errorTarget, error.message);
   } finally {
-    button.disabled = false;
+    buttons.forEach(button => { button.disabled = false; });
   }
+}
+
+function save(event, resource, existing, data, refresh) {
+  event.preventDefault();
+  if (existing.id) data.version = existing.version;
+  const path = resource + (existing.id ? '/' + existing.id : '');
+  submitChange(event.currentTarget, () => api(path, existing.id ? 'PATCH' : 'POST', data),
+    resource === 'leads' ? 'Lead guardado.' : 'Serviço guardado.', refresh);
 }
 
 async function enterWorkspace() {
@@ -329,6 +405,16 @@ document.querySelectorAll('[data-close]').forEach(button => {
 });
 $('#new-lead').addEventListener('click', () => openLead());
 $('#new-service').addEventListener('click', () => openService());
+$('#delete-lead').addEventListener('click', () => {
+  const { id, name, version } = editingLead;
+  if (!window.confirm('Excluir o lead «' + name + '» e o seu histórico?')) return;
+  submitChange(leadForm, () => api('leads/' + id, 'DELETE', { version }), 'Lead excluído.', loadLeads);
+});
+$('#delete-service').addEventListener('click', () => {
+  const { id, name, version } = editingService;
+  if (!window.confirm('Excluir o serviço «' + name + '»? Os leads existentes mantêm o nome e o valor registados.')) return;
+  submitChange(serviceForm, () => api('services/' + id, 'DELETE', { version }), 'Serviço excluído.', loadServices);
+});
 $('#previous').addEventListener('click', () => loadLeads(currentPage - 1));
 $('#next').addEventListener('click', () => loadLeads(currentPage + 1));
 filters.addEventListener('submit', event => {
@@ -339,7 +425,8 @@ filters.addEventListener('submit', event => {
 
 leadForm.addEventListener('submit', event => {
   const data = Object.fromEntries(new FormData(leadForm));
-  data.service_id = data.service_id ? Number(data.service_id) : null;
+  data.clear_service = data.service_id === '';
+  data.service_id = data.service_id && data.service_id !== 'deleted' ? Number(data.service_id) : null;
   save(event, 'leads', editingLead, data, () => loadLeads(editingLead.id ? currentPage : 1));
 });
 serviceForm.addEventListener('submit', event => {

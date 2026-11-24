@@ -45,6 +45,7 @@
           <button id="new-lead" class="primary" type="button"><span aria-hidden="true">+</span> Novo lead</button>
         </div>
         <div id="summary" class="summary"></div>
+        <div id="value-summary" class="summary value-summary" aria-label="Totais do pipeline"></div>
         <form id="filters" class="filters" role="search" aria-label="Filtrar leads">
           <label class="search">Pesquisa<input name="q" type="search" maxlength="120" placeholder="Nome, telefone ou e-mail"></label>
           <label>Etapa<select name="stage"></select></label>
@@ -110,6 +111,7 @@
         <p class="error form-error" role="alert" hidden></p>
       </div>
       <footer class="dialog-actions">
+        <button id="delete-lead" class="danger" type="button" hidden>Excluir lead</button>
         <button class="secondary" type="button" data-close>Cancelar</button>
         <button class="primary" type="submit">Guardar lead</button>
       </footer>
@@ -133,6 +135,7 @@
         <p class="error form-error" role="alert" hidden></p>
       </div>
       <footer class="dialog-actions">
+        <button id="delete-service" class="danger" type="button" hidden>Excluir serviço</button>
         <button class="secondary" type="button" data-close>Cancelar</button>
         <button class="primary" type="submit">Guardar serviço</button>
       </footer>

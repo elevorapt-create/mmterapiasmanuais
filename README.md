@@ -19,6 +19,8 @@ Em `/admin` pode registar leads e serviços, ver o pipeline, agendar sessões e 
 
 A qualificação indica a intenção de marcação. Use **Por qualificar** quando faltam dados, **Frio** para interesse genérico, **Morno** para pedidos de informação ou preço e **Quente** para pedidos de disponibilidade ou intenção concreta de marcar. O registo manual aceita a origem do contacto e os cinco campos UTM para atribuição de campanha. A ligação a um futuro formulário do site deve ser feita no servidor, mantendo a API de administração autenticada.
 
+Arraste os cartões entre colunas no computador ou mude a etapa na edição do lead. Os cartões mostram o preço registado ao associar o serviço. O painel soma separadamente os valores dos agendamentos feitos e das sessões realizadas, incluindo todos os leads dessas etapas. Pode excluir um lead e o respetivo histórico, ou excluir um serviço do catálogo mantendo o preço e o nome nos leads que já o utilizavam.
+
 ### Executar localmente
 
 Use Node.js 22 ou superior. Crie na raiz um ficheiro privado `.dev.vars` com `CRM_ADMIN_PASSWORD` (escolha uma palavra-passe para desenvolvimento) e `CRM_SESSION_SECRET` (gere um valor aleatório com `openssl rand -hex 32`). A palavra-passe é o acesso a uma conta de administração. A sessão expira ao fim de oito horas.
@@ -32,7 +34,7 @@ Abra `http://localhost:8788/admin`. O Wrangler serve as páginas e a API e persi
 
 ### Ativar no Cloudflare Pages
 
-1. Crie uma base D1 e aplique `migrations/0001_crm.sql`. A partir de uma sessão autenticada na conta Cloudflare, pode executar `npx --yes wrangler@4.167.0 d1 execute NOME_DA_BASE --remote --file migrations/0001_crm.sql`.
+1. Crie uma base D1 e aplique os ficheiros de `migrations/` por ordem. A partir de uma sessão autenticada na conta Cloudflare, execute `npx --yes wrangler@4.167.0 d1 execute NOME_DA_BASE --remote --file CAMINHO_DA_MIGRAÇÃO` para cada migração em falta. Para uma base com `0001_crm.sql` já aplicada, aplique apenas `0002_crm_service_values.sql`.
 2. Nas definições do projeto Pages, associe a base à binding `CRM_DB` e adicione os segredos encriptados `CRM_ADMIN_PASSWORD` (uma palavra-passe forte e exclusiva) e `CRM_SESSION_SECRET` (um valor aleatório de pelo menos 32 caracteres). Configure o ambiente de produção e, se precisar de testar previews, associe-lhes uma base e segredos separados.
 3. Publique o projeto Pages com `dist` como diretório de saída e `functions` na raiz do projeto. Após a publicação, abra `/admin` e confirme que o login funciona.
 

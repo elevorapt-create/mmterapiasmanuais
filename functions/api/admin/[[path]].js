@@ -218,31 +218,41 @@ async function listLeads(db, query) {
   const where = filters.length ? ' WHERE ' + filters.join(' AND ') : '';
   const page = Math.min(100000, Math.max(1, Number.parseInt(query.get('page'), 10) || 1));
   const pageSize = 60;
-  const [leads, summary] = await db.batch([
+  const [leads, summary, values] = await db.batch([
     db.prepare(
-      'SELECT leads.id, leads.name, services.name AS service_name, stage, qualification, ' +
-      'next_action, follow_up_on, appointment_at FROM leads LEFT JOIN services ON services.id = service_id' +
+      'SELECT id, version, name, service_name, service_price_cents, stage, qualification, ' +
+      'next_action, follow_up_on, appointment_at FROM leads' +
       where + " ORDER BY NULLIF(follow_up_on, '') ASC NULLS LAST, updated_at DESC, leads.id DESC LIMIT ? OFFSET ?",
     ).bind(...parameters, pageSize, (page - 1) * pageSize),
     db.prepare('SELECT stage, count(*) AS total FROM leads' + where + ' GROUP BY stage').bind(...parameters),
+    db.prepare(
+      "SELECT stage, sum(service_price_cents) AS cents FROM leads WHERE stage IN ('scheduled', 'completed') GROUP BY stage",
+    ),
   ]);
-  return json({ leads: leads.results, totals: summary.results, page_size: pageSize });
+  return json({ leads: leads.results, totals: summary.results, values: values.results, page_size: pageSize });
+}
+
+function changedRecord(row) {
+  if (!row) throw new RequestError(409, 'O registo foi alterado ou excluído. Atualize a página e tente novamente.');
+  return json(row);
 }
 
 async function saveRecord(db, table, id, fields, values, data) {
   if (id === undefined) {
     const placeholders = fields.map(() => '?').join(', ');
-    const row = await db.prepare('INSERT INTO ' + table + ' (' + fields.join(', ') + ') VALUES (' +
-      placeholders + ') RETURNING id').bind(...values).first();
+    const row = await db.prepare('INSERT INTO ' + table + ' (id, ' + fields.join(', ') + ') VALUES (' +
+      '(SELECT last_id + 1 FROM crm_record_sequences WHERE resource = ?), ' + placeholders + ') RETURNING id')
+      .bind(table, ...values).first();
     return json(row, 201);
   }
   const version = integer(data.version, 1, Number.MAX_SAFE_INTEGER, 'versão', false);
   const updateTime = table === 'leads' ? ", updated_at = datetime('now')" : '';
+  const clearService = table === 'leads' && data.service_id == null && data.clear_service === true
+    ? ', service_name = NULL, service_price_cents = NULL' : '';
   const row = await db.prepare('UPDATE ' + table + ' SET ' + fields.map(field => field + ' = ?').join(', ') +
-    ', version = version + 1' + updateTime + ' WHERE id = ? AND version = ? RETURNING id')
+    ', version = version + 1' + updateTime + clearService + ' WHERE id = ? AND version = ? RETURNING id')
     .bind(...values, id, version).first();
-  if (!row) throw new RequestError(409, 'O registo foi alterado. Feche a edição e abra-o novamente.');
-  return json(row);
+  return changedRecord(row);
 }
 
 export async function onRequest({ request, env, params }) {
@@ -282,6 +292,16 @@ export async function onRequest({ request, env, params }) {
         return await saveRecord(db, 'services', undefined, serviceFields, serviceValues(data), data);
       }
     }
+    if (path.length === 3 && resource === 'leads' && path[2] === 'stage' && method === 'PATCH' &&
+        /^[1-9]\d{0,14}$/.test(identifier)) {
+      const data = await readJson(request);
+      const stage = choice(data, 'stage', stages, 'etapa');
+      const version = integer(data.version, 1, Number.MAX_SAFE_INTEGER, 'versão', false);
+      const row = await db.prepare(
+        "UPDATE leads SET stage = ?, version = version + 1, updated_at = datetime('now') WHERE id = ? AND version = ? RETURNING id",
+      ).bind(stage, Number(identifier), version).first();
+      return changedRecord(row);
+    }
     if (path.length === 2 && /^[1-9]\d{0,14}$/.test(identifier)) {
       const id = Number(identifier);
       if (resource === 'leads' && method === 'GET') {
@@ -299,6 +319,13 @@ export async function onRequest({ request, env, params }) {
       if (resource === 'services' && method === 'PATCH') {
         const data = await readJson(request);
         return await saveRecord(db, 'services', id, serviceFields, serviceValues(data), data);
+      }
+      if ((resource === 'leads' || resource === 'services') && method === 'DELETE') {
+        const data = await readJson(request);
+        const version = integer(data.version, 1, Number.MAX_SAFE_INTEGER, 'versão', false);
+        const row = await db.prepare('DELETE FROM ' + resource + ' WHERE id = ? AND version = ? RETURNING id')
+          .bind(id, version).first();
+        return changedRecord(row);
       }
     }
     return json({ error: 'Operação não encontrada.' }, 404);
