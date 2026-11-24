@@ -23,6 +23,8 @@ Arraste os cartões entre colunas no computador ou mude a etapa na edição do l
 
 A área **Clientes** reúne os contactos que já passaram por agendamento ou sessão realizada. Pode pesquisar por nome, telefone ou e-mail e abrir o registo pelo nome. A data de agendamento só é usada em **Agendamento feito** e **Sessão realizada** e deve ser indicada manualmente. Ao arrastar um lead para agendamento a partir de outra etapa, a data fica por preencher.
 
+Registe a data e hora do primeiro contacto na edição do lead. Na ficha de cliente, pode acrescentar sessões e consultar o histórico de agendamentos. As sessões adicionais podem ser marcadas como realizadas ou canceladas na própria ficha. Os agendamentos ligados ao cartão são geridos pelo pipeline.
+
 ### Executar localmente
 
 Use Node.js 22 ou superior. Crie na raiz um ficheiro privado `.dev.vars` com `CRM_ADMIN_PASSWORD` (escolha uma palavra-passe para desenvolvimento) e `CRM_SESSION_SECRET` (gere um valor aleatório com `openssl rand -hex 32`). A palavra-passe é o acesso a uma conta de administração. A sessão expira ao fim de oito horas.
@@ -36,7 +38,7 @@ Abra `http://localhost:8788/admin`. O Wrangler serve as páginas e a API e persi
 
 ### Ativar no Cloudflare Pages
 
-1. Crie uma base D1 e aplique os ficheiros de `migrations/` por ordem. A partir de uma sessão autenticada na conta Cloudflare, execute `npx --yes wrangler@4.167.0 d1 execute NOME_DA_BASE --remote --file CAMINHO_DA_MIGRAÇÃO` para cada migração em falta. Para uma base com `0001_crm.sql` já aplicada, aplique apenas `0002_crm_service_values.sql`.
+1. Crie uma base D1 e aplique os ficheiros de `migrations/` por ordem. A partir de uma sessão autenticada na conta Cloudflare, execute `npx --yes wrangler@4.167.0 d1 execute NOME_DA_BASE --remote --file CAMINHO_DA_MIGRAÇÃO` para cada migração em falta.
 2. Nas definições do projeto Pages, associe a base à binding `CRM_DB` e adicione os segredos encriptados `CRM_ADMIN_PASSWORD` (uma palavra-passe forte e exclusiva) e `CRM_SESSION_SECRET` (um valor aleatório de pelo menos 32 caracteres). Configure o ambiente de produção e, se precisar de testar previews, associe-lhes uma base e segredos separados.
 3. Publique o projeto Pages com `dist` como diretório de saída e `functions` na raiz do projeto. Após a publicação, abra `/admin` e confirme que o login funciona.
 

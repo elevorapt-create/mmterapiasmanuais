@@ -166,7 +166,7 @@ dialog {
   box-shadow: 0 14px 60px #17251b42;
 }
 dialog::backdrop { background: #20302596; }
-dialog form { display: flex; flex-direction: column; max-height: calc(100dvh - 1.65rem); }
+dialog > form, .client-dialog-layout { display: flex; flex-direction: column; max-height: calc(100dvh - 1.65rem); }
 .dialog-header, .dialog-actions { display: flex; align-items: center; padding: .75rem 1rem; gap: .65rem; }
 .dialog-header { justify-content: space-between; border-bottom: 1px solid var(--line); }
 .dialog-actions { justify-content: flex-end; border-top: 1px solid var(--line); flex-wrap: wrap; }
@@ -184,6 +184,13 @@ details .form-grid { margin-top: .8rem; }
 .history { margin: .5rem 0 0; padding-left: 1.35rem; font-size: .88rem; color: var(--muted); }
 .history li + li { margin-top: .3rem; }
 .form-error { margin-top: .8rem; }
+#appointment-form, .appointment-history { margin-top: 1rem; padding-top: .85rem; border-top: 1px solid var(--line); }
+#appointment-form .form-grid { margin: .65rem 0; }
+#client-appointment-error, #client-appointment-status { margin-top: .75rem; }
+#appointment-list { list-style: none; margin: .55rem 0 0; padding: 0; }
+.appointment-entry { padding: .7rem 0; }
+.appointment-entry + .appointment-entry { border-top: 1px solid var(--line); }
+.appointment-actions { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .5rem; }
 @media (max-width: 760px) {
   .layout { grid-template-columns: minmax(0, 1fr); }
   .sidebar { padding: .75rem .9rem; gap: .55rem; }

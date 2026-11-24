@@ -5,12 +5,13 @@ const stages = ['new', 'conversation', 'follow_up', 'scheduled', 'completed', 'l
 const appointmentStages = ['scheduled', 'completed'];
 const appointmentStagesSql = "('" + appointmentStages.join("', '") + "')";
 const visibleAppointment = "CASE WHEN stage IN " + appointmentStagesSql + " THEN appointment_at ELSE '' END";
+const isClient = 'EXISTS (SELECT 1 FROM lead_history WHERE lead_id = leads.id AND stage IN ' + appointmentStagesSql + ')';
 const qualifications = ['unrated', 'cold', 'warm', 'hot'];
 const sources = ['unknown', 'website', 'whatsapp', 'instagram', 'google', 'referral', 'other'];
+const campaignFields = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'];
 const leadFields = [
   'name', 'phone', 'email', 'service_id', 'stage', 'qualification', 'source',
-  'next_action', 'follow_up_on', 'appointment_at', 'notes', 'utm_source',
-  'utm_medium', 'utm_campaign', 'utm_content', 'utm_term',
+  'next_action', 'follow_up_on', 'appointment_at', 'notes', ...campaignFields, 'first_contact_at',
 ];
 const serviceFields = ['name', 'description', 'duration_minutes', 'price_cents', 'active'];
 
@@ -136,7 +137,8 @@ async function leadValues(data, db) {
     dateField(data, 'follow_up_on', 'data de seguimento'),
     appointmentStages.includes(stage) ? dateField(data, 'appointment_at', 'data do agendamento', true) : '',
     textField(data, 'notes', 2000, 'notas'),
-    ...leadFields.slice(11).map(field => textField(data, field, 200, field)),
+    ...campaignFields.map(field => textField(data, field, 200, field)),
+    dateField(data, 'first_contact_at', 'data do primeiro contacto', true),
   ];
 }
 
@@ -209,9 +211,7 @@ function pageNumber(query) {
 }
 
 async function listClients(db, query) {
-  const filters = [
-    'EXISTS (SELECT 1 FROM lead_history WHERE lead_id = leads.id AND stage IN ' + appointmentStagesSql + ')',
-  ];
+  const filters = [isClient];
   const parameters = [];
   contactSearch(query, filters, parameters);
   const where = ' WHERE ' + filters.join(' AND ');
@@ -224,6 +224,35 @@ async function listClients(db, query) {
     db.prepare('SELECT count(*) AS total FROM leads' + where).bind(...parameters),
   ]);
   return json({ clients: clients.results, total: count.results[0].total, page_size: pageSize });
+}
+
+async function clientAppointments(db, id) {
+  const [clients, appointments] = await db.batch([
+    db.prepare('SELECT id, name, phone, email, first_contact_at, service_name FROM leads WHERE id = ? AND ' + isClient)
+      .bind(id),
+    db.prepare('SELECT id, appointment_at, status, service_name, service_price_cents, linked_to_lead ' +
+      'FROM client_appointments WHERE lead_id = ? ORDER BY appointment_at DESC, id DESC').bind(id),
+  ]);
+  if (!clients.results.length) throw new RequestError(404, 'Cliente não encontrado.');
+  return json({ client: clients.results[0], appointments: appointments.results });
+}
+
+async function addClientAppointment(db, id, data) {
+  const date = dateField(data, 'appointment_at', 'data do agendamento', true);
+  if (!date) throw new RequestError(400, 'Indique a data e a hora da sessão.');
+  const service = integer(data.service_id, 1, Number.MAX_SAFE_INTEGER, 'serviço');
+  const row = await db.prepare(
+    "INSERT INTO client_appointments (lead_id, appointment_at, status, service_name, service_price_cents)" +
+    " SELECT leads.id, ?, 'scheduled'," +
+    ' CASE WHEN services.id IS NULL THEN leads.service_name ELSE services.name END,' +
+    ' CASE WHEN services.id IS NULL THEN leads.service_price_cents ELSE services.price_cents END' +
+    ' FROM leads LEFT JOIN services ON services.id = ? WHERE leads.id = ? AND ' + isClient +
+    ' AND (? IS NULL OR services.active = 1)' +
+    " AND NOT EXISTS (SELECT 1 FROM client_appointments WHERE lead_id = leads.id AND appointment_at = ? AND status <> 'cancelled')" +
+    ' RETURNING id',
+  ).bind(date, service, id, service, date).first();
+  if (!row) throw new RequestError(409, 'Verifique se já existe um agendamento nesse horário e se o serviço continua disponível.');
+  return json(row, 201);
 }
 
 async function listLeads(db, query) {
@@ -251,7 +280,7 @@ async function listLeads(db, query) {
   const [leads, summary, values] = await db.batch([
     db.prepare(
       'SELECT id, version, name, service_name, service_price_cents, stage, qualification, ' +
-      'next_action, follow_up_on, ' + visibleAppointment + ' AS appointment_at FROM leads' +
+      'next_action, follow_up_on, first_contact_at, ' + visibleAppointment + ' AS appointment_at FROM leads' +
       where + " ORDER BY NULLIF(follow_up_on, '') ASC NULLS LAST, updated_at DESC, leads.id DESC LIMIT ? OFFSET ?",
     ).bind(...parameters, pageSize, (page - 1) * pageSize),
     db.prepare('SELECT stage, count(*) AS total FROM leads' + where + ' GROUP BY stage').bind(...parameters),
@@ -280,7 +309,8 @@ async function saveRecord(db, table, id, fields, values, data) {
   const clearService = table === 'leads' && data.service_id == null && data.clear_service === true
     ? ', service_name = NULL, service_price_cents = NULL' : '';
   const updates = fields.map((field, index) => [field, values[index]])
-    .filter(([field]) => field !== 'appointment_at' || appointmentStages.includes(data.stage));
+    .filter(([field]) => (field !== 'appointment_at' || appointmentStages.includes(data.stage)) &&
+      (field !== 'first_contact_at' || data.first_contact_at !== undefined));
   const assignments = updates.map(([field]) => field + ' = ?');
   const row = await db.prepare('UPDATE ' + table + ' SET ' + assignments.join(', ') +
     ', version = version + 1' + updateTime + clearService + ' WHERE id = ? AND version = ? RETURNING id')
@@ -312,6 +342,19 @@ export async function onRequest({ request, env, params }) {
     }
     if (path.length === 1 && resource === 'leads' && method === 'GET') return await listLeads(db, url.searchParams);
     if (path.length === 1 && resource === 'clients' && method === 'GET') return await listClients(db, url.searchParams);
+    if (resource === 'clients' && /^[1-9]\d{0,14}$/.test(identifier) && path[2] === 'appointments') {
+      const id = Number(identifier);
+      if (path.length === 3 && method === 'GET') return await clientAppointments(db, id);
+      if (path.length === 3 && method === 'POST') return await addClientAppointment(db, id, await readJson(request));
+      if (path.length === 4 && method === 'PATCH' && /^[1-9]\d{0,14}$/.test(path[3])) {
+        const data = await readJson(request);
+        const status = choice(data, 'status', ['completed', 'cancelled'], 'estado');
+        const row = await db.prepare(
+          "UPDATE client_appointments SET status = ? WHERE id = ? AND lead_id = ? AND linked_to_lead = 0 AND status = 'scheduled' RETURNING id",
+        ).bind(status, Number(path[3]), id).first();
+        return changedRecord(row);
+      }
+    }
     if (path.length === 1 && resource === 'services' && method === 'GET') {
       const { results } = await db.prepare('SELECT * FROM services ORDER BY active DESC, name COLLATE NOCASE, id').all();
       return json({ services: results });

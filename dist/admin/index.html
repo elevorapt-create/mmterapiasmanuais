@@ -112,6 +112,7 @@
           <label>Nome <input name="name" required maxlength="120"></label>
           <label>Telefone <input name="phone" type="tel" maxlength="40"></label>
           <label>E-mail <input name="email" type="email" maxlength="254"></label>
+          <label>Primeiro contacto (hora de Lisboa) <input name="first_contact_at" type="datetime-local"></label>
           <label>Serviço de interesse <select name="service_id"></select></label>
           <label>Etapa <select name="stage" required></select></label>
           <label>Qualificação <select name="qualification" required></select></label>
@@ -145,6 +146,37 @@
         <button class="primary" type="submit">Guardar lead</button>
       </footer>
     </form>
+  </dialog>
+
+  <dialog id="client-dialog" aria-labelledby="client-title">
+    <div class="client-dialog-layout">
+      <header class="dialog-header">
+        <h2 id="client-title">Cliente</h2>
+        <button class="icon-button" type="button" data-close aria-label="Fechar">×</button>
+      </header>
+      <div class="dialog-content">
+        <p id="client-contact" class="card-detail" hidden></p>
+        <p id="client-first-contact" class="card-detail"></p>
+        <form id="appointment-form">
+          <h3>Registar agendamento</h3>
+          <div class="form-grid">
+            <label>Data e hora (Lisboa) <input name="appointment_at" type="datetime-local" required></label>
+            <label>Serviço <select name="service_id"></select></label>
+          </div>
+          <button type="submit" class="primary">Guardar agendamento</button>
+        </form>
+        <p id="client-appointment-status" class="card-detail" role="status" hidden></p>
+        <p id="client-appointment-error" class="error" role="alert" hidden></p>
+        <section class="appointment-history" aria-labelledby="appointment-history-title">
+          <h3 id="appointment-history-title">Histórico de agendamentos</h3>
+          <p id="no-appointments" class="card-detail" hidden>Ainda não há agendamentos com data registada.</p>
+          <ol id="appointment-list"></ol>
+        </section>
+      </div>
+      <footer class="dialog-actions">
+        <button id="edit-client" class="secondary" type="button">Editar cadastro</button>
+      </footer>
+    </div>
   </dialog>
 
   <dialog id="service-dialog" aria-labelledby="service-title">

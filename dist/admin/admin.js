@@ -9,6 +9,7 @@ const stages = {
   lost: 'Encerrado',
 };
 const appointmentStages = ['scheduled', 'completed'];
+const appointmentStatuses = { scheduled: 'Agendado', completed: 'Realizado', cancelled: 'Cancelado' };
 const qualifications = {
   unrated: 'Por qualificar',
   cold: 'Frio',
@@ -36,6 +37,8 @@ const filters = $('#filters');
 const clientFilters = $('#client-filters');
 const leadForm = $('#lead-form');
 const serviceForm = $('#service-form');
+const clientDialog = $('#client-dialog');
+const appointmentForm = $('#appointment-form');
 const currency = new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' });
 const historyDate = new Intl.DateTimeFormat('pt-PT', {
   dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Lisbon',
@@ -48,6 +51,8 @@ let currentView = 'leads';
 let leadRequest = 0;
 let clientRequest = 0;
 let clientPage = 1;
+let selectedClientId;
+let appointmentPending = false;
 let editingLead;
 let editingService;
 let draggedLead;
@@ -87,6 +92,12 @@ function showLogin(message) {
   }
   editingLead = undefined;
   editingService = undefined;
+  selectedClientId = undefined;
+  clientDialog.close();
+  $('#appointment-list').replaceChildren();
+  $('#client-contact').textContent = '';
+  $('#client-first-contact').textContent = '';
+  $('#client-title').textContent = 'Cliente';
   $('#board').replaceChildren();
   $('#summary').replaceChildren();
   $('#value-summary').replaceChildren();
@@ -163,7 +174,7 @@ async function loadClients(page = clientPage) {
       const row = element('tr');
       const name = element('button', 'client-name', client.name);
       name.type = 'button';
-      name.addEventListener('click', () => openLead(client.id));
+      name.addEventListener('click', () => openClient(client.id));
       const nameCell = element('td');
       nameCell.append(name);
       const appointment = client.appointment_at ? formatAppointment(client.appointment_at)
@@ -204,6 +215,82 @@ async function moveLead(lead, stage) {
   }
 }
 
+function renderAppointmentHistory(appointments) {
+  $('#no-appointments').hidden = Boolean(appointments.length);
+  $('#appointment-list').replaceChildren(...appointments.map(appointment => {
+    const item = element('li', 'appointment-entry');
+    const status = appointmentStatuses[appointment.status];
+    item.append(element('strong', '', formatAppointment(appointment.appointment_at) + ' · ' + status));
+    const price = appointment.service_price_cents == null ? '' : currency.format(appointment.service_price_cents / 100);
+    const details = [appointment.service_name, price, appointment.linked_to_lead ? 'Gerido pelo pipeline' : ''].filter(Boolean);
+    if (details.length) item.append(element('span', 'card-detail', details.join(' · ')));
+    if (!appointment.linked_to_lead && appointment.status === 'scheduled') {
+      const actions = element('div', 'appointment-actions');
+      for (const [nextStatus, label] of [['completed', 'Marcar como realizado'], ['cancelled', 'Cancelar agendamento']]) {
+        const button = element('button', 'secondary', label);
+        button.type = 'button';
+        button.addEventListener('click', () => {
+          if (nextStatus === 'cancelled' && !window.confirm('Cancelar este agendamento?')) return;
+          changeAppointment('/' + appointment.id, 'PATCH', { status: nextStatus }, 'Estado atualizado.');
+        });
+        actions.append(button);
+      }
+      item.append(actions);
+    }
+    return item;
+  }));
+}
+
+async function openClient(id) {
+  selectedClientId = id;
+  try {
+    const { client, appointments } = await api('clients/' + id + '/appointments');
+    if (selectedClientId !== id || currentView !== 'clients') return;
+    appointmentForm.reset();
+    const fallback = client.service_name ? 'Serviço do cadastro · ' + client.service_name : 'Sem serviço';
+    selectOptions(field(appointmentForm, 'service_id'), services.filter(service => service.active)
+      .map(service => [service.id, service.name]), fallback, '');
+    $('#client-title').textContent = client.name;
+    setMessage($('#client-contact'), [client.phone, client.email].filter(Boolean).join(' · '));
+    $('#client-first-contact').textContent = 'Primeiro contacto: ' +
+      (client.first_contact_at ? formatAppointment(client.first_contact_at) : 'por registar');
+    setMessage($('#client-appointment-status'));
+    setMessage($('#client-appointment-error'));
+    renderAppointmentHistory(appointments);
+    if (!clientDialog.open) clientDialog.showModal();
+  } catch (error) {
+    if (selectedClientId === id) notice(error.message, true);
+  }
+}
+
+async function changeAppointment(suffix, method, data, message) {
+  if (appointmentPending || !selectedClientId) return;
+  const id = selectedClientId;
+  const path = 'clients/' + id + '/appointments';
+  const submit = appointmentForm.querySelector('[type="submit"]');
+  appointmentPending = true;
+  submit.disabled = true;
+  setMessage($('#client-appointment-error'));
+  setMessage($('#client-appointment-status'));
+  try {
+    await api(path + suffix, method, data);
+    if (selectedClientId !== id) return;
+    if (method === 'POST') {
+      field(appointmentForm, 'appointment_at').value = '';
+      field(appointmentForm, 'service_id').value = '';
+    }
+    const { appointments } = await api(path);
+    if (selectedClientId !== id) return;
+    renderAppointmentHistory(appointments);
+    setMessage($('#client-appointment-status'), message);
+  } catch (error) {
+    if (selectedClientId === id) setMessage($('#client-appointment-error'), error.message);
+  } finally {
+    appointmentPending = false;
+    submit.disabled = false;
+  }
+}
+
 function leadCard(lead, today, draggable) {
   const card = element('button', 'lead-card');
   card.type = 'button';
@@ -213,6 +300,9 @@ function leadCard(lead, today, draggable) {
     card.append(element('span', 'card-detail lead-price', currency.format(lead.service_price_cents / 100)));
   }
   card.append(element('span', 'badge ' + lead.qualification, qualifications[lead.qualification]));
+  if (lead.first_contact_at) {
+    card.append(element('span', 'card-detail', 'Primeiro contacto: ' + formatAppointment(lead.first_contact_at)));
+  }
   if (lead.next_action) card.append(element('span', 'card-detail', lead.next_action));
   if (lead.follow_up_on) {
     const pending = lead.stage !== 'completed' && lead.stage !== 'lost';
@@ -460,6 +550,20 @@ document.querySelectorAll('[data-close]').forEach(button => {
 });
 $('#new-lead').addEventListener('click', () => openLead());
 $('#new-service').addEventListener('click', () => openService());
+clientDialog.addEventListener('close', () => { selectedClientId = undefined; });
+$('#edit-client').addEventListener('click', () => {
+  const id = selectedClientId;
+  clientDialog.close();
+  if (id) openLead(id);
+});
+appointmentForm.addEventListener('submit', event => {
+  event.preventDefault();
+  const service = field(appointmentForm, 'service_id').value;
+  changeAppointment('', 'POST', {
+    appointment_at: field(appointmentForm, 'appointment_at').value,
+    service_id: service ? Number(service) : null,
+  }, 'Agendamento guardado.');
+});
 $('#delete-lead').addEventListener('click', () => {
   const { id, name, version } = editingLead;
   if (!window.confirm('Excluir o lead «' + name + '» e o seu histórico?')) return;
