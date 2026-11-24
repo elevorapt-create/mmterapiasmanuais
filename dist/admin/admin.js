@@ -1,0 +1,378 @@
+'use strict';
+
+const stages = {
+  new: 'Novo lead',
+  conversation: 'Conversa iniciada',
+  follow_up: 'Em seguimento',
+  scheduled: 'Agendamento feito',
+  completed: 'Sessão realizada',
+  lost: 'Encerrado',
+};
+const qualifications = {
+  unrated: 'Por qualificar',
+  cold: 'Frio',
+  warm: 'Morno',
+  hot: 'Quente',
+};
+const qualificationHints = {
+  unrated: 'Ainda não há informação suficiente para avaliar o interesse.',
+  cold: 'Mostrou interesse genérico, sem intenção ou prazo definido.',
+  warm: 'Pediu informações sobre um serviço ou preço, sem avançar para marcação.',
+  hot: 'Pediu disponibilidade, indicou um prazo ou mostrou intenção de marcar.',
+};
+const sources = {
+  unknown: 'Desconhecida',
+  website: 'Site',
+  whatsapp: 'WhatsApp',
+  instagram: 'Instagram',
+  google: 'Google',
+  referral: 'Recomendação',
+  other: 'Outra',
+};
+const $ = selector => document.querySelector(selector);
+const field = (form, name) => form.elements.namedItem(name);
+const filters = $('#filters');
+const leadForm = $('#lead-form');
+const serviceForm = $('#service-form');
+const currency = new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' });
+const historyDate = new Intl.DateTimeFormat('pt-PT', {
+  dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Lisbon',
+});
+const localDate = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Lisbon' });
+
+let services = [];
+let currentPage = 1;
+let currentView = 'leads';
+let leadRequest = 0;
+let editingLead;
+let editingService;
+
+function element(tag, className, label) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (label !== undefined) node.textContent = label;
+  return node;
+}
+
+function setMessage(target, message = '') {
+  target.textContent = message;
+  target.hidden = !message;
+}
+
+function notice(message = '', error = false) {
+  const target = $('#notice');
+  target.classList.toggle('error', error);
+  setMessage(target, message);
+}
+
+function selectOptions(select, options, first = '', selected = select.value) {
+  const entries = (first ? [['', first], ...options] : options);
+  select.replaceChildren(...entries.map(([id, label]) => new Option(label, id)));
+  if (entries.some(([id]) => String(id) === String(selected))) select.value = selected;
+}
+
+function showLogin(message) {
+  leadRequest++;
+  services = [];
+  for (const form of [leadForm, serviceForm]) {
+    form.closest('dialog').close();
+    form.reset();
+  }
+  editingLead = undefined;
+  editingService = undefined;
+  $('#board').replaceChildren();
+  $('#summary').replaceChildren();
+  $('#service-list').replaceChildren();
+  $('#history-list').replaceChildren();
+  $('#workspace').hidden = true;
+  $('#login').hidden = false;
+  setMessage($('#login-error'), message);
+  field($('#login-form'), 'password').focus();
+}
+
+async function api(path, method = 'GET', body) {
+  const options = { method, credentials: 'same-origin', cache: 'no-store' };
+  if (body !== undefined) {
+    options.headers = { 'Content-Type': 'application/json' };
+    options.body = JSON.stringify(body);
+  }
+  const response = await fetch('/api/admin/' + path, options);
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    if (response.status === 401 && path !== 'login' && path !== 'session') {
+      showLogin('A sessão terminou. Inicie sessão novamente.');
+    }
+    const error = new Error(data.error || 'Não foi possível concluir o pedido. Tente novamente.');
+    error.status = response.status;
+    throw error;
+  }
+  return data;
+}
+
+async function loadServices() {
+  const result = await api('services');
+  services = result.services;
+  selectOptions(field(filters, 'service'),
+    services.map(service => [service.id, service.name + (service.active ? '' : ' (inativo)')]), 'Todos');
+  setMessage($('#empty-services'), services.length ? '' : 'Ainda não existem serviços. Use «Novo serviço» para cadastrar o primeiro.');
+  $('#service-list').replaceChildren(...services.map(service => {
+    const card = element('button', 'service-card');
+    card.type = 'button';
+    card.append(element('strong', '', service.name));
+    const details = [
+      service.duration_minutes === null ? '' : service.duration_minutes + ' min',
+      service.price_cents === null ? '' : currency.format(service.price_cents / 100),
+    ].filter(Boolean);
+    if (details.length) card.append(element('span', 'card-detail', details.join(' · ')));
+    if (service.description) card.append(element('span', 'card-detail', service.description));
+    card.append(element('span', 'badge' + (service.active ? ' active' : ''), service.active ? 'Ativo' : 'Inativo'));
+    card.addEventListener('click', () => openService(service));
+    return card;
+  }));
+}
+
+function formatDate(date) {
+  return date.split('-').reverse().join('/');
+}
+
+function leadCard(lead, today) {
+  const card = element('button', 'lead-card');
+  card.type = 'button';
+  card.append(element('strong', '', lead.name));
+  if (lead.service_name) card.append(element('span', 'card-detail', lead.service_name));
+  card.append(element('span', 'badge ' + lead.qualification, qualifications[lead.qualification]));
+  if (lead.next_action) card.append(element('span', 'card-detail', lead.next_action));
+  if (lead.follow_up_on) {
+    const pending = lead.stage !== 'completed' && lead.stage !== 'lost';
+    const overdue = pending && lead.follow_up_on < today;
+    card.append(element('span', 'card-detail' + (overdue ? ' overdue' : ''),
+      (overdue ? 'Seguimento em atraso: ' : 'Seguimento: ') + formatDate(lead.follow_up_on)));
+  }
+  if (lead.appointment_at) {
+    const [date, time] = lead.appointment_at.split('T');
+    card.append(element('span', 'card-detail', formatDate(date) + ' às ' + time));
+  }
+  card.addEventListener('click', () => openLead(lead.id));
+  return card;
+}
+
+function renderLeads(result, stageFilter) {
+  const totals = Object.fromEntries(result.totals.map(row => [row.stage, row.total]));
+  const count = result.totals.reduce((sum, row) => sum + row.total, 0);
+  const metrics = [
+    ['Leads', count],
+    ['Em conversa ou seguimento', (totals.conversation ?? 0) + (totals.follow_up ?? 0)],
+    ['Agendamentos feitos', totals.scheduled ?? 0],
+    ['Sessões realizadas', totals.completed ?? 0],
+  ];
+  $('#summary').replaceChildren(...metrics.map(([label, total]) => {
+    const metric = element('div', 'metric');
+    metric.append(element('span', '', label), element('strong', '', total));
+    return metric;
+  }));
+
+  const today = localDate.format(new Date());
+  const columns = Object.entries(stages).filter(([key]) => !stageFilter || key === stageFilter);
+  const board = $('#board');
+  board.classList.toggle('single-stage', columns.length === 1);
+  board.replaceChildren(...columns.map(([key, label]) => {
+    const column = element('section', 'column');
+    const heading = element('h2', '', label);
+    heading.append(element('span', 'count', totals[key] ?? 0));
+    column.append(heading);
+    for (const lead of result.leads.filter(item => item.stage === key)) column.append(leadCard(lead, today));
+    return column;
+  }));
+  setMessage($('#empty-leads'), count ? '' : 'Nenhum lead corresponde a esta pesquisa.');
+  const pages = Math.max(1, Math.ceil(count / result.page_size));
+  $('#pagination').hidden = pages === 1;
+  $('#previous').disabled = currentPage <= 1;
+  $('#next').disabled = currentPage >= pages;
+  $('#page-label').textContent = 'Página ' + currentPage + ' de ' + pages;
+}
+
+async function loadLeads(page = currentPage) {
+  const request = ++leadRequest;
+  const query = new URLSearchParams(new FormData(filters));
+  query.set('page', page);
+  try {
+    const result = await api('leads?' + query);
+    if (request !== leadRequest) return;
+    currentPage = page;
+    if (page > 1 && !result.leads.length) return await loadLeads(page - 1);
+    renderLeads(result, query.get('stage'));
+  } catch (error) {
+    if (request === leadRequest) notice(error.message, true);
+  }
+}
+
+function switchView(view, focus = true) {
+  currentView = view;
+  $('#view-leads').hidden = view !== 'leads';
+  $('#view-services').hidden = view !== 'services';
+  document.querySelectorAll('[data-view]').forEach(button => {
+    if (button.dataset.view === view) button.setAttribute('aria-current', 'page');
+    else button.removeAttribute('aria-current');
+  });
+  if (focus) $('#' + view + '-title').focus();
+}
+
+function updateQualificationHint() {
+  $('#qualification-hint').textContent = qualificationHints[field(leadForm, 'qualification').value];
+}
+
+async function openLead(id) {
+  const dialog = $('#lead-dialog');
+  let lead = { stage: 'new', qualification: 'unrated', source: 'unknown' };
+  let history = [];
+  if (id !== undefined) {
+    try {
+      ({ lead, history } = await api('leads/' + id));
+    } catch (error) {
+      notice(error.message, true);
+      return;
+    }
+  }
+
+  editingLead = lead;
+  leadForm.reset();
+  $('#lead-title').textContent = id === undefined ? 'Novo lead' : 'Editar lead';
+  selectOptions(field(leadForm, 'service_id'),
+    services.filter(service => service.active || service.id === lead.service_id)
+      .map(service => [service.id, service.name + (service.active ? '' : ' (inativo)')]),
+    'Sem serviço', lead.service_id ?? '');
+  for (const [name, value] of Object.entries(lead)) {
+    const input = field(leadForm, name);
+    if (input && value !== null) input.value = value;
+  }
+  updateQualificationHint();
+  $('#campaign').open = ['source', 'medium', 'campaign', 'content', 'term'].some(key => lead['utm_' + key]);
+  $('#lead-history').hidden = !history.length;
+  $('#history-list').replaceChildren(...history.map(entry => {
+    const date = new Date(entry.created_at.replace(' ', 'T') + 'Z');
+    return element('li', '', historyDate.format(date) + ' · ' +
+      stages[entry.stage] + ' · ' + qualifications[entry.qualification]);
+  }));
+  setMessage(leadForm.querySelector('.form-error'));
+  if (!dialog.open) dialog.showModal();
+}
+
+function openService(service = {}) {
+  editingService = service;
+  serviceForm.reset();
+  $('#service-title').textContent = service.id ? 'Editar serviço' : 'Novo serviço';
+  field(serviceForm, 'name').value = service.name ?? '';
+  field(serviceForm, 'description').value = service.description ?? '';
+  field(serviceForm, 'duration_minutes').value = service.duration_minutes ?? '';
+  field(serviceForm, 'price').value = service.price_cents == null ? '' : (service.price_cents / 100).toFixed(2);
+  field(serviceForm, 'active').checked = service.active === undefined || Boolean(service.active);
+  setMessage(serviceForm.querySelector('.form-error'));
+  $('#service-dialog').showModal();
+}
+
+async function save(event, resource, existing, data, refresh) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const button = form.querySelector('[type="submit"]');
+  if (button.disabled) return;
+  const errorTarget = form.querySelector('.form-error');
+  setMessage(errorTarget);
+  button.disabled = true;
+  if (existing.id) data.version = existing.version;
+  try {
+    await api(resource + (existing.id ? '/' + existing.id : ''), existing.id ? 'PATCH' : 'POST', data);
+    form.closest('dialog').close();
+    notice(resource === 'leads' ? 'Lead guardado.' : 'Serviço guardado.');
+    try {
+      await refresh();
+    } catch (error) {
+      notice(error.message, true);
+    }
+  } catch (error) {
+    setMessage(errorTarget, error.message);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function enterWorkspace() {
+  $('#login').hidden = true;
+  $('#workspace').hidden = false;
+  notice();
+  switchView('leads');
+  try {
+    await loadServices();
+  } catch (error) {
+    notice(error.message, true);
+  }
+  if (!$('#workspace').hidden) await loadLeads(1);
+}
+
+selectOptions(field(filters, 'stage'), Object.entries(stages), 'Todas');
+selectOptions(field(filters, 'qualification'), Object.entries(qualifications), 'Todas');
+selectOptions(field(leadForm, 'stage'), Object.entries(stages));
+selectOptions(field(leadForm, 'qualification'), Object.entries(qualifications));
+selectOptions(field(leadForm, 'source'), Object.entries(sources));
+field(leadForm, 'qualification').setAttribute('aria-describedby', 'qualification-hint');
+field(leadForm, 'qualification').addEventListener('change', updateQualificationHint);
+
+document.querySelectorAll('[data-view]').forEach(button => {
+  button.addEventListener('click', () => {
+    notice();
+    switchView(button.dataset.view);
+    if (currentView === 'services') loadServices().catch(error => notice(error.message, true));
+    else loadLeads();
+  });
+});
+document.querySelectorAll('[data-close]').forEach(button => {
+  button.addEventListener('click', () => button.closest('dialog').close());
+});
+$('#new-lead').addEventListener('click', () => openLead());
+$('#new-service').addEventListener('click', () => openService());
+$('#previous').addEventListener('click', () => loadLeads(currentPage - 1));
+$('#next').addEventListener('click', () => loadLeads(currentPage + 1));
+filters.addEventListener('submit', event => {
+  event.preventDefault();
+  notice();
+  loadLeads(1);
+});
+
+leadForm.addEventListener('submit', event => {
+  const data = Object.fromEntries(new FormData(leadForm));
+  data.service_id = data.service_id ? Number(data.service_id) : null;
+  save(event, 'leads', editingLead, data, () => loadLeads(editingLead.id ? currentPage : 1));
+});
+serviceForm.addEventListener('submit', event => {
+  const data = Object.fromEntries(new FormData(serviceForm));
+  data.duration_minutes = data.duration_minutes === '' ? null : Number(data.duration_minutes);
+  data.price_cents = data.price === '' ? null : Math.round(Number(data.price) * 100);
+  delete data.price;
+  data.active = field(serviceForm, 'active').checked;
+  save(event, 'services', editingService, data, loadServices);
+});
+$('#login-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const button = form.querySelector('button');
+  button.disabled = true;
+  setMessage($('#login-error'));
+  try {
+    await api('login', 'POST', { password: field(form, 'password').value });
+    form.reset();
+    await enterWorkspace();
+  } catch (error) {
+    setMessage($('#login-error'), error.message);
+  } finally {
+    button.disabled = false;
+  }
+});
+$('#logout').addEventListener('click', async () => {
+  try {
+    await api('logout', 'POST', {});
+    location.reload();
+  } catch (error) {
+    notice(error.message, true);
+  }
+});
+
+api('session').then(enterWorkspace).catch(error => showLogin(error.status === 401 ? '' : error.message));
