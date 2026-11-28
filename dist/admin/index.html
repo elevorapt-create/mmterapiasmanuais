@@ -52,7 +52,21 @@
           <label>Etapa<select name="stage"></select></label>
           <label>Qualificação<select name="qualification"></select></label>
           <label>Serviço<select name="service"></select></label>
+          <label>Origem<select name="source"></select></label>
+          <div class="date-filters">
+            <fieldset class="date-range">
+              <legend>Primeiro contacto</legend>
+              <label>De<input name="contact_from" type="date"></label>
+              <label>Até<input name="contact_to" type="date"></label>
+            </fieldset>
+            <fieldset class="date-range">
+              <legend>Agendamento atual</legend>
+              <label>De<input name="appointment_from" type="date"></label>
+              <label>Até<input name="appointment_to" type="date"></label>
+            </fieldset>
+          </div>
           <button class="secondary" type="submit">Filtrar</button>
+          <button class="filter-clear" type="button" data-clear-filters>Limpar filtros</button>
         </form>
         <p id="empty-leads" class="empty" hidden></p>
         <div id="board" class="board" role="region" aria-label="Etapas do pipeline" tabindex="0"></div>
@@ -68,7 +82,21 @@
         </div>
         <form id="client-filters" class="filters" role="search" aria-label="Pesquisar clientes">
           <label class="search">Pesquisa<input name="q" type="search" maxlength="120" placeholder="Nome, telefone ou e-mail"></label>
+          <label>Origem<select name="source"></select></label>
+          <div class="date-filters">
+            <fieldset class="date-range">
+              <legend>Primeiro contacto</legend>
+              <label>De<input name="contact_from" type="date"></label>
+              <label>Até<input name="contact_to" type="date"></label>
+            </fieldset>
+            <fieldset class="date-range">
+              <legend>Agendamentos do histórico</legend>
+              <label>De<input name="appointment_from" type="date"></label>
+              <label>Até<input name="appointment_to" type="date"></label>
+            </fieldset>
+          </div>
           <button class="secondary" type="submit">Pesquisar</button>
+          <button class="filter-clear" type="button" data-clear-filters>Limpar filtros</button>
         </form>
         <p id="empty-clients" class="empty" hidden></p>
         <div id="client-table" class="table-frame" role="region" aria-label="Cadastro de clientes" tabindex="0" hidden>

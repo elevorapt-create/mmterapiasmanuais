@@ -93,6 +93,21 @@ main { padding: clamp(1rem, 3vw, 2.4rem); }
 .filters { display: flex; align-items: end; flex-wrap: wrap; gap: .7rem; margin-bottom: .95rem; }
 .filters label { flex: 1 1 130px; min-width: 0; }
 .filters .search { flex-grow: 1.7; }
+.date-filters { display: flex; flex: 1 1 100%; flex-wrap: wrap; gap: .7rem; }
+.date-range {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  flex: 1 1 270px;
+  gap: .55rem;
+  min-width: 0;
+  margin: 0;
+  padding: .45rem .65rem .65rem;
+  border: 1px solid var(--line);
+  border-radius: .55rem;
+}
+.date-range legend { color: var(--green); font-size: .88rem; font-weight: 650; }
+.date-range input { min-width: 0; }
+.filter-clear { min-height: 42px; border: 0; background: transparent; color: var(--green); text-decoration: underline; }
 label { display: grid; gap: .35rem; color: var(--green); font-size: .88rem; font-weight: 650; min-width: 0; }
 input, select, textarea {
   width: 100%;

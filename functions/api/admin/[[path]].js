@@ -198,11 +198,49 @@ async function activeSession(request, db, key, now) {
     .bind(sessionKey, now).first('session_key');
 }
 
-function contactSearch(query, filters, parameters) {
+function dateRange(query, prefix, column, label, parameters) {
+  const dates = { from: query.get(prefix + '_from'), to: query.get(prefix + '_to') };
+  const from = dateField(dates, 'from', label + ' (início)');
+  const to = dateField(dates, 'to', label + ' (fim)');
+  if (from && to && from > to) {
+    throw new RequestError(400, 'A data inicial deve ser anterior ou igual à data final no intervalo de ' + label + '.');
+  }
+  if (!from && !to) return '';
+
+  const conditions = [column + " <> ''"];
+  if (from) {
+    conditions.push(column + ' >= ?');
+    parameters.push(from + 'T00:00');
+  }
+  if (to) {
+    conditions.push(column + ' <= ?');
+    parameters.push(to + 'T23:59');
+  }
+  return conditions.join(' AND ');
+}
+
+function contactSearch(query, filters, parameters, useAppointmentHistory = false) {
   const term = (query.get('q') ?? '').trim().slice(0, 120);
   if (term) {
     filters.push('(instr(lower(leads.name), lower(?)) OR instr(leads.phone, ?) OR instr(lower(leads.email), lower(?)))');
     parameters.push(term, term, term);
+  }
+  const source = query.get('source');
+  if (source) {
+    if (!sources.includes(source)) throw new RequestError(400, 'Selecione uma origem válida.');
+    filters.push('leads.source = ?');
+    parameters.push(source);
+  }
+  const firstContact = dateRange(query, 'contact', 'leads.first_contact_at', 'primeiro contacto', parameters);
+  if (firstContact) filters.push(firstContact);
+
+  const appointment = dateRange(query, 'appointment',
+    useAppointmentHistory ? 'client_appointments.appointment_at' : 'leads.appointment_at',
+    'agendamento', parameters);
+  if (appointment) {
+    filters.push(useAppointmentHistory
+      ? "EXISTS (SELECT 1 FROM client_appointments WHERE lead_id = leads.id AND status IN ('scheduled', 'completed') AND " + appointment + ')'
+      : 'leads.stage IN ' + appointmentStagesSql + ' AND ' + appointment);
   }
 }
 
@@ -213,7 +251,7 @@ function pageNumber(query) {
 async function listClients(db, query) {
   const filters = [isClient];
   const parameters = [];
-  contactSearch(query, filters, parameters);
+  contactSearch(query, filters, parameters, true);
   const where = ' WHERE ' + filters.join(' AND ');
   const pageSize = 40;
   const [clients, count] = await db.batch([

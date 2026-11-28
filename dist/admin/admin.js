@@ -184,7 +184,8 @@ async function loadClients(page = clientPage) {
       return row;
     }));
     $('#client-table').hidden = !result.clients.length;
-    setMessage($('#empty-clients'), result.clients.length ? '' : query.get('q')
+    const hasFilters = [...query].some(([name, value]) => name !== 'page' && value.trim());
+    setMessage($('#empty-clients'), result.clients.length ? '' : hasFilters
       ? 'Nenhum cliente corresponde à pesquisa.' : 'Ainda não há contactos com agendamento no histórico.');
     $('#client-pagination').hidden = pages === 1;
     $('#client-previous').disabled = clientPage === 1;
@@ -529,12 +530,20 @@ async function enterWorkspace() {
 
 selectOptions(field(filters, 'stage'), Object.entries(stages), 'Todas');
 selectOptions(field(filters, 'qualification'), Object.entries(qualifications), 'Todas');
+selectOptions(field(filters, 'source'), Object.entries(sources), 'Todas');
+selectOptions(field(clientFilters, 'source'), Object.entries(sources), 'Todas');
 selectOptions(field(leadForm, 'stage'), Object.entries(stages));
 selectOptions(field(leadForm, 'qualification'), Object.entries(qualifications));
 selectOptions(field(leadForm, 'source'), Object.entries(sources));
 field(leadForm, 'qualification').setAttribute('aria-describedby', 'qualification-hint');
 field(leadForm, 'qualification').addEventListener('change', updateQualificationHint);
 field(leadForm, 'stage').addEventListener('change', updateAppointmentField);
+document.querySelectorAll('[data-clear-filters]').forEach(button => {
+  button.addEventListener('click', () => {
+    button.form.reset();
+    button.form.requestSubmit();
+  });
+});
 
 document.querySelectorAll('[data-view]').forEach(button => {
   button.addEventListener('click', () => {

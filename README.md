@@ -25,6 +25,8 @@ A área **Clientes** reúne os contactos que já passaram por agendamento ou ses
 
 Registe a data e hora do primeiro contacto na edição do lead. Na ficha de cliente, pode acrescentar sessões e consultar o histórico de agendamentos. As sessões adicionais podem ser marcadas como realizadas ou canceladas na própria ficha. Os agendamentos ligados ao cartão são geridos pelo pipeline.
 
+No Pipeline e em Clientes pode combinar a origem com datas de primeiro contacto e de agendamento. Os limites dos intervalos são inclusivos e podem ser usados separadamente, em hora de Lisboa. O Pipeline filtra pela data atual do cartão. A lista de Clientes filtra pelos agendamentos marcados ou realizados do histórico.
+
 ### Executar localmente
 
 Use Node.js 22 ou superior. Crie na raiz um ficheiro privado `.dev.vars` com `CRM_ADMIN_PASSWORD` (escolha uma palavra-passe para desenvolvimento) e `CRM_SESSION_SECRET` (gere um valor aleatório com `openssl rand -hex 32`). A palavra-passe é o acesso a uma conta de administração. A sessão expira ao fim de oito horas.
