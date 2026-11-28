@@ -120,7 +120,7 @@ input, select, textarea {
   font-weight: 400;
 }
 textarea { resize: vertical; }
-.board { display: grid; grid-template-columns: repeat(6, minmax(172px, 1fr)); overflow-x: auto; gap: .65rem; padding: .15rem .15rem .7rem; }
+.board { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(172px, 1fr); overflow-x: auto; gap: .65rem; padding: .15rem .15rem .7rem; }
 .column { border: 1px solid var(--line); border-radius: .65rem; padding: .58rem; background: #eef1e9; min-height: 160px; }
 .column h2 { display: flex; justify-content: space-between; gap: .35rem; font-size: .88rem; margin: .15rem .12rem .55rem; }
 .count { color: var(--green); font-variant-numeric: tabular-nums; }
@@ -215,6 +215,6 @@ details .form-grid { margin-top: .8rem; }
 }
 @media (max-width: 450px) {
   .form-grid { grid-template-columns: minmax(0, 1fr); }
-  .board { grid-template-columns: repeat(6, minmax(190px, 74vw)); }
+  .board { grid-auto-columns: minmax(190px, 74vw); }
 }
 .board.single-stage { grid-template-columns: minmax(172px, 440px); }

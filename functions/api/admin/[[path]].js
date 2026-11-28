@@ -1,7 +1,7 @@
 const COOKIE = '__Host-mm_crm';
 const SESSION_SECONDS = 8 * 60 * 60;
 const encoder = new TextEncoder();
-const stages = ['new', 'conversation', 'follow_up', 'scheduled', 'completed', 'lost'];
+const stages = ['new', 'conversation', 'follow_up', 'waiting_for_slot', 'scheduled', 'completed', 'lost'];
 const appointmentStages = ['scheduled', 'completed'];
 const appointmentStagesSql = "('" + appointmentStages.join("', '") + "')";
 const visibleAppointment = "CASE WHEN stage IN " + appointmentStagesSql + " THEN appointment_at ELSE '' END";
@@ -315,18 +315,17 @@ async function listLeads(db, query) {
   const where = filters.length ? ' WHERE ' + filters.join(' AND ') : '';
   const page = pageNumber(query);
   const pageSize = 60;
-  const [leads, summary, values] = await db.batch([
+  const [leads, summary] = await db.batch([
     db.prepare(
       'SELECT id, version, name, service_name, service_price_cents, stage, qualification, ' +
       'next_action, follow_up_on, first_contact_at, ' + visibleAppointment + ' AS appointment_at FROM leads' +
       where + " ORDER BY NULLIF(follow_up_on, '') ASC NULLS LAST, updated_at DESC, leads.id DESC LIMIT ? OFFSET ?",
     ).bind(...parameters, pageSize, (page - 1) * pageSize),
-    db.prepare('SELECT stage, count(*) AS total FROM leads' + where + ' GROUP BY stage').bind(...parameters),
-    db.prepare(
-      "SELECT stage, sum(service_price_cents) AS cents FROM leads WHERE stage IN ('scheduled', 'completed') GROUP BY stage",
-    ),
+    db.prepare('SELECT stage, count(*) AS total, sum(service_price_cents) AS cents FROM leads' +
+      where + ' GROUP BY stage').bind(...parameters),
   ]);
-  return json({ leads: leads.results, totals: summary.results, values: values.results, page_size: pageSize });
+  const values = summary.results.filter(row => appointmentStages.includes(row.stage));
+  return json({ leads: leads.results, totals: summary.results, values, page_size: pageSize });
 }
 
 function changedRecord(row) {

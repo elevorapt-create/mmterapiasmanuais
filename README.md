@@ -15,11 +15,11 @@ As seis fotografias reais foram selecionadas e aprovadas pelo gestor. O gestor c
 
 ## CRM
 
-Em `/admin` pode registar leads e serviços, ver o pipeline, agendar sessões e acompanhar datas de seguimento. As etapas são **Novo lead → Conversa iniciada → Em seguimento → Agendamento feito → Sessão realizada**, com **Encerrado** para contactos que deixaram de avançar. As alterações de etapa e qualificação ficam no histórico do contacto.
+Em `/admin` pode registar leads e serviços, ver o pipeline, agendar sessões e acompanhar datas de seguimento. As etapas são **Novo lead → Conversa iniciada → Em seguimento → Falta de horário → Agendamento feito → Sessão realizada**, com **Encerrado** para contactos que deixaram de avançar. Use **Falta de horário** quando o contacto ainda aguarda um horário disponível. As alterações de etapa e qualificação ficam no histórico do contacto.
 
 A qualificação indica a intenção de marcação. Use **Por qualificar** quando faltam dados, **Frio** para interesse genérico, **Morno** para pedidos de informação ou preço e **Quente** para pedidos de disponibilidade ou intenção concreta de marcar. O registo manual aceita a origem do contacto e os cinco campos UTM para atribuição de campanha. A ligação a um futuro formulário do site deve ser feita no servidor, mantendo a API de administração autenticada.
 
-Arraste os cartões entre colunas no computador ou mude a etapa na edição do lead. Os cartões mostram o preço registado ao associar o serviço. O painel soma separadamente os valores dos agendamentos feitos e das sessões realizadas, incluindo todos os leads dessas etapas. Pode excluir um lead e o respetivo histórico, ou excluir um serviço do catálogo mantendo o preço e o nome nos leads que já o utilizavam.
+Arraste os cartões entre colunas no computador ou mude a etapa na edição do lead. Os cartões mostram o preço registado ao associar o serviço. O painel soma separadamente os valores dos agendamentos feitos e das sessões realizadas que correspondem aos filtros, incluindo todas as páginas de resultados. Pode excluir um lead e o respetivo histórico, ou excluir um serviço do catálogo mantendo o preço e o nome nos leads que já o utilizavam.
 
 A área **Clientes** reúne os contactos que já passaram por agendamento ou sessão realizada. Pode pesquisar por nome, telefone ou e-mail e abrir o registo pelo nome. A data de agendamento só é usada em **Agendamento feito** e **Sessão realizada** e deve ser indicada manualmente. Ao arrastar um lead para agendamento a partir de outra etapa, a data fica por preencher.
 

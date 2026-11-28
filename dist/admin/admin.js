@@ -4,6 +4,7 @@ const stages = {
   new: 'Novo lead',
   conversation: 'Conversa iniciada',
   follow_up: 'Em seguimento',
+  waiting_for_slot: 'Falta de horário',
   scheduled: 'Agendamento feito',
   completed: 'Sessão realizada',
   lost: 'Encerrado',
