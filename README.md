@@ -27,6 +27,8 @@ Registe a data e hora do primeiro contacto na edição do lead. Na ficha de clie
 
 No Pipeline e em Clientes pode combinar a origem com datas de primeiro contacto e de agendamento. Os limites dos intervalos são inclusivos e podem ser usados separadamente, em hora de Lisboa. O Pipeline filtra pela data atual do cartão. A lista de Clientes filtra pelos agendamentos marcados ou realizados do histórico.
 
+Abra os painéis **Filtros** e **Totais** quando precisar deles. No Pipeline, pode selecionar várias etapas, qualificações, serviços e origens; em Clientes, pode selecionar várias origens. O resultado pode corresponder a qualquer opção de cada grupo e deve respeitar todos os grupos selecionados.
+
 ### Executar localmente
 
 Use Node.js 22 ou superior. Crie na raiz um ficheiro privado `.dev.vars` com `CRM_ADMIN_PASSWORD` (escolha uma palavra-passe para desenvolvimento) e `CRM_SESSION_SECRET` (gere um valor aleatório com `openssl rand -hex 32`). A palavra-passe é o acesso a uma conta de administração. A sessão expira ao fim de oito horas.

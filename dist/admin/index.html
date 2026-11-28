@@ -45,29 +45,49 @@
           <h1 id="leads-title" tabindex="-1">Pipeline de leads</h1>
           <button id="new-lead" class="primary" type="button"><span aria-hidden="true">+</span> Novo lead</button>
         </div>
-        <div id="summary" class="summary"></div>
-        <div id="value-summary" class="summary value-summary" aria-label="Totais do pipeline"></div>
-        <form id="filters" class="filters" role="search" aria-label="Filtrar leads">
-          <label class="search">Pesquisa<input name="q" type="search" maxlength="120" placeholder="Nome, telefone ou e-mail"></label>
-          <label>Etapa<select name="stage"></select></label>
-          <label>Qualificação<select name="qualification"></select></label>
-          <label>Serviço<select name="service"></select></label>
-          <label>Origem<select name="source"></select></label>
-          <div class="date-filters">
-            <fieldset class="date-range">
-              <legend>Primeiro contacto</legend>
-              <label>De<input name="contact_from" type="date"></label>
-              <label>Até<input name="contact_to" type="date"></label>
-            </fieldset>
-            <fieldset class="date-range">
-              <legend>Agendamento atual</legend>
-              <label>De<input name="appointment_from" type="date"></label>
-              <label>Até<input name="appointment_to" type="date"></label>
-            </fieldset>
+        <details class="crm-panel" id="totals-panel">
+          <summary>Totais</summary>
+          <div class="crm-panel-content">
+            <div id="summary" class="summary"></div>
+            <div id="value-summary" class="summary value-summary" aria-label="Totais do pipeline"></div>
           </div>
-          <button class="secondary" type="submit">Filtrar</button>
-          <button class="filter-clear" type="button" data-clear-filters>Limpar filtros</button>
-        </form>
+        </details>
+        <details class="crm-panel" id="lead-filter-panel">
+          <summary>Filtros <span class="active-filters" data-active-filters hidden>Filtros ativos</span></summary>
+          <form id="filters" class="filters" role="search" aria-label="Filtrar leads">
+            <label class="search">Pesquisa<input name="q" type="search" maxlength="120" placeholder="Nome, telefone ou e-mail"></label>
+            <details class="filter-picker" data-filter="stage">
+              <summary>Etapa <span class="filter-count" hidden></span></summary>
+              <fieldset class="filter-options" aria-label="Etapa"></fieldset>
+            </details>
+            <details class="filter-picker" data-filter="qualification">
+              <summary>Qualificação <span class="filter-count" hidden></span></summary>
+              <fieldset class="filter-options" aria-label="Qualificação"></fieldset>
+            </details>
+            <details class="filter-picker" data-filter="service">
+              <summary>Serviço <span class="filter-count" hidden></span></summary>
+              <fieldset class="filter-options" aria-label="Serviço"></fieldset>
+            </details>
+            <details class="filter-picker" data-filter="source">
+              <summary>Origem <span class="filter-count" hidden></span></summary>
+              <fieldset class="filter-options" aria-label="Origem"></fieldset>
+            </details>
+            <div class="date-filters">
+              <fieldset class="date-range">
+                <legend>Primeiro contacto</legend>
+                <label>De<input name="contact_from" type="date"></label>
+                <label>Até<input name="contact_to" type="date"></label>
+              </fieldset>
+              <fieldset class="date-range">
+                <legend>Agendamento atual</legend>
+                <label>De<input name="appointment_from" type="date"></label>
+                <label>Até<input name="appointment_to" type="date"></label>
+              </fieldset>
+            </div>
+            <button class="secondary" type="submit">Filtrar</button>
+            <button class="filter-clear" type="button" data-clear-filters>Limpar filtros</button>
+          </form>
+        </details>
         <p id="empty-leads" class="empty" hidden></p>
         <div id="board" class="board" role="region" aria-label="Etapas do pipeline" tabindex="0"></div>
         <div id="pagination" class="pagination" hidden>
@@ -80,24 +100,30 @@
         <div class="page-header">
           <h1 id="clients-title" tabindex="-1">Clientes</h1>
         </div>
-        <form id="client-filters" class="filters" role="search" aria-label="Pesquisar clientes">
-          <label class="search">Pesquisa<input name="q" type="search" maxlength="120" placeholder="Nome, telefone ou e-mail"></label>
-          <label>Origem<select name="source"></select></label>
-          <div class="date-filters">
-            <fieldset class="date-range">
-              <legend>Primeiro contacto</legend>
-              <label>De<input name="contact_from" type="date"></label>
-              <label>Até<input name="contact_to" type="date"></label>
-            </fieldset>
-            <fieldset class="date-range">
-              <legend>Agendamentos do histórico</legend>
-              <label>De<input name="appointment_from" type="date"></label>
-              <label>Até<input name="appointment_to" type="date"></label>
-            </fieldset>
-          </div>
-          <button class="secondary" type="submit">Pesquisar</button>
-          <button class="filter-clear" type="button" data-clear-filters>Limpar filtros</button>
-        </form>
+        <details class="crm-panel" id="client-filter-panel">
+          <summary>Filtros <span class="active-filters" data-active-filters hidden>Filtros ativos</span></summary>
+          <form id="client-filters" class="filters" role="search" aria-label="Pesquisar clientes">
+            <label class="search">Pesquisa<input name="q" type="search" maxlength="120" placeholder="Nome, telefone ou e-mail"></label>
+            <details class="filter-picker" data-filter="source">
+              <summary>Origem <span class="filter-count" hidden></span></summary>
+              <fieldset class="filter-options" aria-label="Origem"></fieldset>
+            </details>
+            <div class="date-filters">
+              <fieldset class="date-range">
+                <legend>Primeiro contacto</legend>
+                <label>De<input name="contact_from" type="date"></label>
+                <label>Até<input name="contact_to" type="date"></label>
+              </fieldset>
+              <fieldset class="date-range">
+                <legend>Agendamentos do histórico</legend>
+                <label>De<input name="appointment_from" type="date"></label>
+                <label>Até<input name="appointment_to" type="date"></label>
+              </fieldset>
+            </div>
+            <button class="secondary" type="submit">Pesquisar</button>
+            <button class="filter-clear" type="button" data-clear-filters>Limpar filtros</button>
+          </form>
+        </details>
         <p id="empty-clients" class="empty" hidden></p>
         <div id="client-table" class="table-frame" role="region" aria-label="Cadastro de clientes" tabindex="0" hidden>
           <table>

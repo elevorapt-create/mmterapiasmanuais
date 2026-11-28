@@ -52,6 +52,8 @@ let currentView = 'leads';
 let leadRequest = 0;
 let clientRequest = 0;
 let clientPage = 1;
+let appliedLeadFilters = new URLSearchParams();
+let appliedClientFilters = new URLSearchParams();
 let selectedClientId;
 let appointmentPending = false;
 let editingLead;
@@ -83,9 +85,46 @@ function selectOptions(select, options, first = '', selected = select.value) {
   if (entries.some(([id]) => String(id) === String(selected))) select.value = selected;
 }
 
+function updateFilterCount(picker) {
+  const count = picker.querySelectorAll('input:checked').length;
+  setMessage(picker.querySelector('.filter-count'), count ? String(count) : '');
+}
+
+function loadFilterOptions(form, name, options) {
+  const picker = form.querySelector('[data-filter="' + name + '"]');
+  const checked = new Set(new FormData(form).getAll(name));
+  const list = picker.querySelector('.filter-options');
+  list.replaceChildren(...options.map(([value, label]) => {
+    const option = element('label');
+    const checkbox = element('input');
+    checkbox.type = 'checkbox';
+    checkbox.name = name;
+    checkbox.value = value;
+    checkbox.checked = checked.has(String(value));
+    option.append(checkbox, document.createTextNode(label));
+    return option;
+  }));
+  if (!options.length) list.append(element('p', 'card-detail', 'Ainda não existem opções.'));
+  updateFilterCount(picker);
+}
+
+function markAppliedFilters(form, selection) {
+  const active = [...selection.values()].some(value => value.trim());
+  form.closest('.crm-panel').querySelector('[data-active-filters]').hidden = !active;
+  return active;
+}
+
 function showLogin(message) {
   leadRequest++;
   clientRequest++;
+  appliedLeadFilters = new URLSearchParams();
+  appliedClientFilters = new URLSearchParams();
+  for (const form of [filters, clientFilters]) {
+    form.reset();
+    form.querySelectorAll('.filter-picker').forEach(updateFilterCount);
+    markAppliedFilters(form, new URLSearchParams());
+  }
+  document.querySelectorAll('.crm-panel, .filter-picker').forEach(panel => { panel.open = false; });
   services = [];
   for (const form of [leadForm, serviceForm]) {
     form.closest('dialog').close();
@@ -133,8 +172,12 @@ async function api(path, method = 'GET', body) {
 async function loadServices() {
   const result = await api('services');
   services = result.services;
-  selectOptions(field(filters, 'service'),
-    services.map(service => [service.id, service.name + (service.active ? '' : ' (inativo)')]), 'Todos');
+  loadFilterOptions(filters, 'service',
+    services.map(service => [service.id, service.name + (service.active ? '' : ' (inativo)')]));
+  const available = new Set(services.map(service => String(service.id)));
+  for (const id of appliedLeadFilters.getAll('service')) {
+    if (!available.has(id)) appliedLeadFilters.delete('service', id);
+  }
   setMessage($('#empty-services'), services.length ? '' : 'Ainda não existem serviços. Use «Novo serviço» para cadastrar o primeiro.');
   $('#service-list').replaceChildren(...services.map(service => {
     const card = element('button', 'service-card');
@@ -161,15 +204,16 @@ function formatAppointment(appointment) {
   return formatDate(date) + ' às ' + time;
 }
 
-async function loadClients(page = clientPage) {
+async function loadClients(page = clientPage, selection = appliedClientFilters) {
   const request = ++clientRequest;
-  const query = new URLSearchParams(new FormData(clientFilters));
+  const query = new URLSearchParams(selection);
   query.set('page', page);
   try {
     const result = await api('clients?' + query);
     if (request !== clientRequest) return;
     const pages = Math.max(1, Math.ceil(result.total / result.page_size));
-    if (page > pages) return await loadClients(pages);
+    if (page > pages) return await loadClients(pages, selection);
+    appliedClientFilters = selection;
     clientPage = page;
     $('#client-list').replaceChildren(...result.clients.map(client => {
       const row = element('tr');
@@ -185,7 +229,7 @@ async function loadClients(page = clientPage) {
       return row;
     }));
     $('#client-table').hidden = !result.clients.length;
-    const hasFilters = [...query].some(([name, value]) => name !== 'page' && value.trim());
+    const hasFilters = markAppliedFilters(clientFilters, selection);
     setMessage($('#empty-clients'), result.clients.length ? '' : hasFilters
       ? 'Nenhum cliente corresponde à pesquisa.' : 'Ainda não há contactos com agendamento no histórico.');
     $('#client-pagination').hidden = pages === 1;
@@ -339,7 +383,7 @@ function renderMetrics(target, metrics) {
   }));
 }
 
-function renderLeads(result, stageFilter) {
+function renderLeads(result, stageFilters) {
   const totals = Object.fromEntries(result.totals.map(row => [row.stage, row.total]));
   const count = result.totals.reduce((sum, row) => sum + row.total, 0);
   const metrics = [
@@ -356,7 +400,7 @@ function renderLeads(result, stageFilter) {
   ]);
 
   const today = localDate.format(new Date());
-  const columns = Object.entries(stages).filter(([key]) => !stageFilter || key === stageFilter);
+  const columns = Object.entries(stages).filter(([key]) => !stageFilters.length || stageFilters.includes(key));
   const board = $('#board');
   finishDrag();
   board.classList.toggle('single-stage', columns.length === 1);
@@ -394,16 +438,18 @@ function renderLeads(result, stageFilter) {
   $('#page-label').textContent = 'Página ' + currentPage + ' de ' + pages;
 }
 
-async function loadLeads(page = currentPage) {
+async function loadLeads(page = currentPage, selection = appliedLeadFilters) {
   const request = ++leadRequest;
-  const query = new URLSearchParams(new FormData(filters));
+  const query = new URLSearchParams(selection);
   query.set('page', page);
   try {
     const result = await api('leads?' + query);
     if (request !== leadRequest) return;
     currentPage = page;
-    if (page > 1 && !result.leads.length) return await loadLeads(page - 1);
-    renderLeads(result, query.get('stage'));
+    if (page > 1 && !result.leads.length) return await loadLeads(page - 1, selection);
+    appliedLeadFilters = selection;
+    markAppliedFilters(filters, selection);
+    renderLeads(result, query.getAll('stage'));
   } catch (error) {
     if (request === leadRequest) notice(error.message, true);
   }
@@ -529,19 +575,33 @@ async function enterWorkspace() {
   if (!$('#workspace').hidden) await loadLeads(1);
 }
 
-selectOptions(field(filters, 'stage'), Object.entries(stages), 'Todas');
-selectOptions(field(filters, 'qualification'), Object.entries(qualifications), 'Todas');
-selectOptions(field(filters, 'source'), Object.entries(sources), 'Todas');
-selectOptions(field(clientFilters, 'source'), Object.entries(sources), 'Todas');
+loadFilterOptions(filters, 'stage', Object.entries(stages));
+loadFilterOptions(filters, 'qualification', Object.entries(qualifications));
+loadFilterOptions(filters, 'source', Object.entries(sources));
+loadFilterOptions(clientFilters, 'source', Object.entries(sources));
 selectOptions(field(leadForm, 'stage'), Object.entries(stages));
 selectOptions(field(leadForm, 'qualification'), Object.entries(qualifications));
 selectOptions(field(leadForm, 'source'), Object.entries(sources));
 field(leadForm, 'qualification').setAttribute('aria-describedby', 'qualification-hint');
 field(leadForm, 'qualification').addEventListener('change', updateQualificationHint);
 field(leadForm, 'stage').addEventListener('change', updateAppointmentField);
+document.querySelectorAll('.filter-picker').forEach(picker => {
+  picker.addEventListener('change', () => updateFilterCount(picker));
+  picker.addEventListener('keydown', event => {
+    if (event.key !== 'Escape' || !picker.open) return;
+    picker.open = false;
+    picker.querySelector('summary').focus();
+  });
+});
+document.addEventListener('click', event => {
+  document.querySelectorAll('.filter-picker[open]').forEach(picker => {
+    if (!picker.contains(event.target)) picker.open = false;
+  });
+});
 document.querySelectorAll('[data-clear-filters]').forEach(button => {
   button.addEventListener('click', () => {
     button.form.reset();
+    button.form.querySelectorAll('.filter-picker').forEach(updateFilterCount);
     button.form.requestSubmit();
   });
 });
@@ -592,12 +652,12 @@ $('#client-next').addEventListener('click', () => loadClients(clientPage + 1));
 clientFilters.addEventListener('submit', event => {
   event.preventDefault();
   notice();
-  loadClients(1);
+  loadClients(1, new URLSearchParams(new FormData(clientFilters)));
 });
 filters.addEventListener('submit', event => {
   event.preventDefault();
   notice();
-  loadLeads(1);
+  loadLeads(1, new URLSearchParams(new FormData(filters)));
 });
 
 leadForm.addEventListener('submit', event => {

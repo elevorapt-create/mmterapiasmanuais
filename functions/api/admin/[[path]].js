@@ -219,18 +219,23 @@ function dateRange(query, prefix, column, label, parameters) {
   return conditions.join(' AND ');
 }
 
+function matchAny(column, values, filters, parameters) {
+  if (!values.length) return;
+  filters.push(column + ' IN (SELECT value FROM json_each(?))');
+  parameters.push(JSON.stringify([...new Set(values)]));
+}
+
 function contactSearch(query, filters, parameters, useAppointmentHistory = false) {
   const term = (query.get('q') ?? '').trim().slice(0, 120);
   if (term) {
     filters.push('(instr(lower(leads.name), lower(?)) OR instr(leads.phone, ?) OR instr(lower(leads.email), lower(?)))');
     parameters.push(term, term, term);
   }
-  const source = query.get('source');
-  if (source) {
-    if (!sources.includes(source)) throw new RequestError(400, 'Selecione uma origem válida.');
-    filters.push('leads.source = ?');
-    parameters.push(source);
+  const selectedSources = query.getAll('source').filter(Boolean);
+  if (selectedSources.some(source => !sources.includes(source))) {
+    throw new RequestError(400, 'Selecione uma origem válida.');
   }
+  matchAny('leads.source', selectedSources, filters, parameters);
   const firstContact = dateRange(query, 'contact', 'leads.first_contact_at', 'primeiro contacto', parameters);
   if (firstContact) filters.push(firstContact);
 
@@ -297,21 +302,9 @@ async function listLeads(db, query) {
   const filters = [];
   const parameters = [];
   contactSearch(query, filters, parameters);
-  const stage = query.get('stage');
-  const qualification = query.get('qualification');
-  const service = query.get('service');
-  if (stages.includes(stage)) {
-    filters.push('stage = ?');
-    parameters.push(stage);
-  }
-  if (qualifications.includes(qualification)) {
-    filters.push('qualification = ?');
-    parameters.push(qualification);
-  }
-  if (service && /^[1-9]\d{0,14}$/.test(service)) {
-    filters.push('service_id = ?');
-    parameters.push(Number(service));
-  }
+  matchAny('stage', query.getAll('stage').filter(stage => stages.includes(stage)), filters, parameters);
+  matchAny('qualification', query.getAll('qualification').filter(value => qualifications.includes(value)), filters, parameters);
+  matchAny('service_id', query.getAll('service').filter(id => /^[1-9]\d{0,14}$/.test(id)).map(Number), filters, parameters);
   const where = filters.length ? ' WHERE ' + filters.join(' AND ') : '';
   const page = pageNumber(query);
   const pageSize = 60;
